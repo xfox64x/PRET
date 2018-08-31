@@ -70,9 +70,9 @@ class capabilities():
       langs = item(re.findall("CMD:(.+?);", response)) # e.g. CMD:PCL,PJL,POSTSCRIPT
       self.support = filter(None, [re.findall(re.escape(pdl), langs, re.I) for pdl in lang])
       self.set_support(model)
-      output().green("found")
+      output().green_("found")
     except Exception as e:
-      output().errmsg("not found", e)
+      output().errmsg_("not found", e)
 
   #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   # get capabilities via HTTP
@@ -87,9 +87,9 @@ class capabilities():
       model = item(title)
       # get language support
       self.set_support(model)
-      output().green("found")
+      output().green_("found")
     except Exception as e:
-      output().errmsg("not found", e)
+      output().errmsg_("not found", e)
 
   #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   # get capabilities via SNMP
@@ -116,17 +116,17 @@ class capabilities():
       langs = ','.join(pdls)
       self.support = filter(None, [re.findall(re.escape(pdl), langs, re.I) for pdl in lang])
       self.set_support(model)
-      output().green("found")
+      output().green_("found")
     except NameError:
-      output().errmsg("not found", "pysnmp module not installed")
+      output().errmsg_("not found", "pysnmp module not installed")
     except Exception as e:
-      output().errmsg("not found", e)
+      output().errmsg_("not found", e)
   #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   # feedback on language support
   def feedback(self, support, lang):
     sys.stdout.write("Checking for %-21s" % (lang + " support: "))
-    if support: output().green("found")
-    else: output().warning("not found")
+    if support: output().green_("found")
+    else: output().warning_("not found")
 
   #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   # set language support
@@ -152,5 +152,5 @@ class capabilities():
       f.close()
       return models
     except IOError as e:
-      output().errmsg("Cannot open file", e)
+      output().errmsg_("Cannot open file", e)
       return []
