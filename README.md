@@ -25,7 +25,10 @@ For experimental, ‘driverless’ printing (see print command), ImageMagick and
 ### Usage
 
 ```
-usage: pret.py [-h] [-s] [-q] [-d] [-i file] [-o file] target {ps,pjl,pcl}
+usage: pret.py [-h] [-s] [-q] [-d] [-i file] [-o file | -O]
+               target {ps,pjl,pcl}
+
+Printer Exploitation Toolkit.
 
 positional arguments:
   target                printer device or hostname
@@ -37,7 +40,8 @@ optional arguments:
   -q, --quiet           suppress warnings and chit-chat
   -d, --debug           enter debug mode (show traffic)
   -i file, --load file  load and run commands from file
-  -o file, --log file   log raw data sent to the target
+  -o file, --log file   Log command line session to specified file.
+  -O, --Log             Log command line session to <cwd>\<target>_PRET_Log.txt
 ```
 
 ###### Example usage:
