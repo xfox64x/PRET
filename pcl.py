@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
 # python standard library
-import re, os, json, random
+import re, os, json, random, time
 
 # local pret classes
 from printer import printer
-from helper import log, output, conv, item, const as c	
+from helper import conv, item, const as c	
 
 class pcl(printer):
   # --------------------------------------------------------------------
@@ -18,7 +18,12 @@ class pcl(printer):
     try:
       cmd_send = c.UEL + c.PCL_HEADER + str_send + footer + c.UEL
       # write to logfile
-      log().write(self.logfile, c.ESC + str_send + os.linesep)
+      #self.logger.write(c.ESC + str_send + os.linesep)
+      #self.logger.write(os.linesep + "%%%%%%%%%%%%%%%%%%%%%%%%%% Sending Payload %%%%%%%%%%%%%%%%%%%%%%%%%%" + os.linesep)
+      #self.logger.write("%%% Timestamp: " + time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + os.linesep)
+      #self.logger.write(os.linesep + str_send + os.linesep)
+      #self.logger.write("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" + os.linesep + os.linesep)
+      
       # sent to printer
       self.send(cmd_send)
       # use random token as delimiter for PCL responses
@@ -103,10 +108,10 @@ class pcl(printer):
     "List contents of virtual file system:  ls"
     pclfs = self.dirlist()
     if not pclfs: # no files have yet been uploaded
-      output().raw("This is a virtual pclfs. Use 'put' to upload files.")
+      self.logger.raw("This is a virtual pclfs. Use 'put' to upload files.")
     # list files with syntax highlighting
     for name, (id, size, date) in sorted(pclfs.items()):
-      output().pcldir(size, conv().lsdate(int(date)), id, name)
+      self.logger.pcldir(size, conv().lsdate(int(date)), id, name)
 
   # ====================================================================
 
@@ -121,7 +126,7 @@ class pcl(printer):
       # remove macro itself
       self.delete_macro(id)
     else:
-      print("File not found.")
+      self.logger.printAndWrite("File not found.")
 
   # ------------------------[ get <file> ]------------------------------
   def get(self, path, size=None):
@@ -130,7 +135,7 @@ class pcl(printer):
       if path == name:
         str_recv = self.retrieve_data(id)
         return (int(size), str_recv)
-    print("File not found.")
+    self.logger.printAndWrite("File not found.")
     return c.NONEXISTENT
 
   def retrieve_data(self, id):
@@ -147,7 +152,7 @@ class pcl(printer):
     # find free macro id not already reserved for file
     else: id = str(item(set(c.BLOCKRANGE).difference(self.idlist())))
     # abort if we have used up the whole macro id space
-    if not id: return output().warning("Out of macro slots.")
+    if not id: return self.logger.warning("Out of macro slots.")
     self.chitchat("Using macro id #" + id)
     # retrieve and update superblock
     size = str(len(data))
@@ -202,21 +207,21 @@ class pcl(printer):
     if arg in self.entities:
       entity, desc = self.entities[arg]
       for location in self.locations:
-        output().raw(desc + " " + self.locations[location])
+        self.logger.raw(desc + " " + self.locations[location])
         str_send = '*s' + location + 'T'         # set location type
         str_send += c.ESC + '*s0U'               # set location unit
         str_send += c.ESC + '*s' + entity + 'I'  # set inquire entity
-        output().info(self.cmd(str_send))
+        self.logger.info(self.cmd(str_send))
     else:
       self.help_info()
 
   def help_info(self):
-    print("Show information:  info <category>")
-    print("  info fonts      - Show installed fonts.")
-    print("  info macros     - Show installed macros.")
-    print("  info patterns   - Show user-defined patterns.")
-    print("  info symbols    - Show symbol sets.")
-    print("  info extended   - Show extended fonts.")
+    self.logger.printAndWrite("Show information:  info <category>")
+    self.logger.printAndWrite("  info fonts      - Show installed fonts.")
+    self.logger.printAndWrite("  info macros     - Show installed macros.")
+    self.logger.printAndWrite("  info patterns   - Show user-defined patterns.")
+    self.logger.printAndWrite("  info symbols    - Show symbol sets.")
+    self.logger.printAndWrite("  info extended   - Show extended fonts.")
 
   def complete_info(self, text, line, begidx, endidx):
     return [cat for cat in self.entities if cat.startswith(text)]
@@ -240,9 +245,9 @@ class pcl(printer):
   # ------------------------[ df ]--------------------------------------
   def do_free(self, arg):
     "Show available memory."
-    output().info(self.cmd('*s1M'))
+    self.logger.info(self.cmd('*s1M'))
 
   # ------------------------[ selftest ]--------------------------------
   def do_selftest(self, arg):
     "Perform printer self-test."
-    output().info(self.cmd('z'))
+    self.logger.info(self.cmd('z'))
