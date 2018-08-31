@@ -67,7 +67,7 @@ class discovery():
   def __init__(self, usage=False):
     # abort if pysnmp is not installed
     if not snmp_modules_found:
-      output().warning("Please install the 'pysnmp' module for SNMP support.")
+      output().warning_("Please install the 'pysnmp' module for SNMP support.")
       if usage: print("")
       return
     # skip when running 'discover' in interactive mode
@@ -106,13 +106,13 @@ class discovery():
       # list found network printers
       if results:
         print("")
-        output().discover(('address', ('device', 'uptime', 'status', None)))
-        output().hline(79)
+        output().discover_(('address', ('device', 'uptime', 'status', None)))
+        output().hline_(79)
         for printer in sorted(results.items(), key=lambda item: socket.inet_aton(item[0])):
-          output().discover(printer)
+          output().discover_(printer)
       else:
-        output().info("No printers found via SNMP broadcast")
+        output().info_("No printers found via SNMP broadcast")
       if usage or results: print("")
     except Exception as e:
-      output().errmsg("SNMP Error", e)
+      output().errmsg_("SNMP Error", e)
       if usage: print("")
