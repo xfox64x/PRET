@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 
 # python standard library
-import re, os, random, posixpath
+import re, os, random, posixpath, time
 
 # local pret classes
 from printer import printer
 from codebook import codebook
-from helper import log, output, conv, file, item, chunks, const as c
+from helper import conv, file, item, chunks, const as c
 
 class pjl(printer):
   # --------------------------------------------------------------------
@@ -21,7 +21,12 @@ class pjl(printer):
     try:
       cmd_send = c.UEL + str_send + c.EOL + status + footer + c.UEL
       # write to logfile
-      log().write(self.logfile, str_send + os.linesep)
+      
+      #self.logger.write(os.linesep + "%%%%%%%%%%%%%%%%%%%%%%%%%% Sending Payload %%%%%%%%%%%%%%%%%%%%%%%%%%" + os.linesep)
+      #self.logger.write("%%% Timestamp: " + time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + os.linesep)
+      #self.logger.write(os.linesep + str_send + os.linesep)
+      #self.logger.write("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" + os.linesep + os.linesep)
+      
       # sent to printer
       self.send(cmd_send)
       # for commands that expect a response
@@ -60,7 +65,7 @@ class pjl(printer):
   def do_status(self, arg):
     "Enable status messages."
     self.status = not self.status
-    print("Status messages enabled" if self.status else "Status messages disabled")
+    self.logger.printAndWrite("Status messages enabled" if self.status else "Status messages disabled")
 
   # parse PJL status message
   def showstatus(self, str_stat):
@@ -79,7 +84,7 @@ class pjl(printer):
         code = str(int(code) - 2000)
       # show status from display and codebook
       error = item(codebook().get_errors(code), 'Unknown status')
-      output().errmsg("CODE " + code + ": " + message, error)
+      self.logger.errmsg("CODE " + code + ": " + message, error)
 
   # parse PJL file errors
   def fileerror(self, str_recv):
@@ -194,7 +199,7 @@ class pjl(printer):
       for key in set(list).intersection(('.', '..')): del list[key]
     # list files with syntax highlighting
     for name, size in sorted(list.items()):
-      output().pjldir(name, size)
+      self.logger.pjldir(name, size)
 
   # ====================================================================
 
@@ -215,7 +220,7 @@ class pjl(printer):
       + '" OFFSET=0 SIZE=' + str(size), True, True, True)
       return (size, str_recv)
     else:
-      print("File not found.")
+      self.logger.printAndWrite("File not found.")
       return c.NONEXISTENT
 
   # ------------------------[ put <local file> ]------------------------
@@ -243,7 +248,7 @@ class pjl(printer):
   # ------------------------[ mirror <local path> ]---------------------
   def do_mirror(self, arg):
     "Mirror remote file system to local directory:  mirror <remote path>"
-    print("Creating mirror of " + c.SEP + self.vpath(arg))
+    self.logger.printAndWrite("Creating mirror of " + c.SEP + self.vpath(arg))
     self.fswalk(arg, 'mirror')
 
   # perform recursive function on file system
@@ -258,7 +263,7 @@ class pjl(printer):
       name = self.normpath(arg) + self.get_sep(arg) + name
       name = name.lstrip(c.SEP) # crop leading slashes
       # execute function for current file
-      if mode == 'find': output().raw(c.SEP + name)
+      if mode == 'find': self.logger.raw(c.SEP + name)
       if mode == 'mirror': self.mirror(name, size)
       # recursion on directory
       if not size: self.fswalk(name, mode, True)
@@ -299,27 +304,27 @@ class pjl(printer):
       if item:
         match = re.findall("(" + item + "=.*(\n\t.*)*)", str_recv, re.I|re.M)
         if echo:
-          for m in match: output().info(m[0])
-          if not match: print("Not available.")
+          for m in match: self.logger.info(m[0])
+          if not match: self.logger.printAndWrite("Not available.")
         return match
       else:
         for line in str_recv.splitlines():
           if arg == 'id': line = line.strip('"')
           if arg == 'filesys': line = line.lstrip()
-          output().info(line)
+          self.logger.info(line)
     else:
       self.help_info()
 
   def help_info(self):
-    print("Show information:  info <category>")
-    print("  info config      - Provides configuration information.")
-    print("  info filesys     - Returns PJL file system information.")
-    print("  info id          - Provides the printer model number.")
-    print("  info memory      - Identifies amount of memory available.")
-    print("  info pagecount   - Returns the number of pages printed.")
-    print("  info status      - Provides the current printer status.")
-    print("  info ustatus     - Lists the unsolicited status variables.")
-    print("  info variables   - Lists printer's environment variables.")
+    self.logger.printAndWrite("Show information:  info <category>")
+    self.logger.printAndWrite("  info config      - Provides configuration information.")
+    self.logger.printAndWrite("  info filesys     - Returns PJL file system information.")
+    self.logger.printAndWrite("  info id          - Provides the printer model number.")
+    self.logger.printAndWrite("  info memory      - Identifies amount of memory available.")
+    self.logger.printAndWrite("  info pagecount   - Returns the number of pages printed.")
+    self.logger.printAndWrite("  info status      - Provides the current printer status.")
+    self.logger.printAndWrite("  info ustatus     - Lists the unsolicited status variables.")
+    self.logger.printAndWrite("  info variables   - Lists printer's environment variables.")
 
   # undocumented (old hp laserjet): log, tracking, prodinfo, supplies
   options_info = ('config', 'filesys', 'id', 'log', 'memory', 'pagecount',
@@ -338,7 +343,7 @@ class pjl(printer):
         variables += var
       self.options_printenv = variables
       match = re.findall("^(" + re.escape(arg) + ".*)\s+\[", item, re.I)
-      if match: output().info(match[0])
+      if match: self.logger.info(match[0])
 
   options_printenv = []
   def complete_printenv(self, text, line, begidx, endidx):
@@ -369,10 +374,10 @@ class pjl(printer):
   def do_pagecount(self, arg):
     "Manipulate printer's page counter:  pagecount <number>"
     if not arg:
-      output().raw("Hardware page counter: ", '')
+      self.logger.raw("Hardware page counter: ", '')
       self.onecmd("info pagecount")
     else:
-      output().raw("Old page counter: ", '')
+      self.logger.raw("Old page counter: ", '')
       self.onecmd("info pagecount")
       # set page counter for older HP LaserJets
       # self.cmd('@PJL SET SERVICEMODE=HPBOISEID'     + c.EOL
@@ -383,7 +388,7 @@ class pjl(printer):
       #        + '@PJL DEFAULT COPYPAGECOUNT='  + arg + c.EOL
       #        + '@PJL SET SERVICEMODE=EXIT', False)
       self.do_set("PAGES=" + arg, False)
-      output().raw("New page counter: ", '')
+      self.logger.raw("New page counter: ", '')
       self.onecmd("info pagecount")
 
   # ====================================================================
@@ -403,27 +408,27 @@ class pjl(printer):
     if not arg:
       arg = raw_input("Offline display message: ")
     arg = arg.strip('"') # remove quotes
-    output().warning("Warning: Taking the printer offline will prevent yourself and others")
-    output().warning("from printing or re-connecting to the device. Press CTRL+C to abort.")
-    if output().countdown("Taking printer offline in...", 10, self):
+    self.logger.warning("Warning: Taking the printer offline will prevent yourself and others")
+    self.logger.warning("from printing or re-connecting to the device. Press CTRL+C to abort.")
+    if self.logger.countdown("Taking printer offline in...", 10, self):
       self.cmd('@PJL OPMSG DISPLAY="' + arg + '"', False)
 
   # ------------------------[ restart ]---------------------------------
   def do_restart(self, arg):
     "Restart printer."
-    output().raw("Trying to restart the device via PML (Printer Managment Language)")
+    self.logger.raw("Trying to restart the device via PML (Printer Managment Language)")
     self.cmd('@PJL DMCMD ASCIIHEX="040006020501010301040104"', False)
     if not self.conn._file: # in case we're connected over inet socket
-      output().chitchat("This command works only for HP printers. For other vendors, try:")
-      output().chitchat("snmpset -v1 -c public " + self.target + " 1.3.6.1.2.1.43.5.1.1.3.1 i 4")
+      self.logger.chitchat("This command works only for HP printers. For other vendors, try:")
+      self.logger.chitchat("snmpset -v1 -c public " + self.target + " 1.3.6.1.2.1.43.5.1.1.3.1 i 4")
 
   # ------------------------[ reset ]-----------------------------------
   def do_reset(self, arg):
     "Reset to factory defaults."
     if not self.conn._file: # in case we're connected over inet socket
-      output().warning("Warning: This may also reset TCP/IP settings to factory defaults.")
-      output().warning("You will not be able to reconnect anymore. Press CTRL+C to abort.")
-    if output().countdown("Restoring factory defaults in...", 10, self):
+      self.logger.warning("Warning: This may also reset TCP/IP settings to factory defaults.")
+      self.logger.warning("You will not be able to reconnect anymore. Press CTRL+C to abort.")
+    if self.logger.countdown("Restoring factory defaults in...", 10, self):
       # reset nvram for pml-aware printers (hp)
       self.cmd('@PJL DMCMD ASCIIHEX="040006020501010301040106"', False)
       # this one might work on ancient laserjets
@@ -437,8 +442,8 @@ class pjl(printer):
              + '@PJL RESET'                     + c.EOL
              + '@PJL EXECUTE SHUTDOWN', False)
       if not self.conn._file: # in case we're connected over inet socket
-        output().chitchat("This command works only for HP printers. For other vendors, try:")
-        output().chitchat("snmpset -v1 -c public " + self.target + " 1.3.6.1.2.1.43.5.1.1.3.1 i 6")
+        self.logger.chitchat("This command works only for HP printers. For other vendors, try:")
+        self.logger.chitchat("snmpset -v1 -c public " + self.target + " 1.3.6.1.2.1.43.5.1.1.3.1 i 6")
 
   # ------------------------[ selftest ]--------------------------------
   def do_selftest(self, arg):
@@ -481,31 +486,31 @@ class pjl(printer):
   # ------------------------[ format ]----------------------------------
   def do_format(self, arg):
     "Initialize printer's mass storage file system."
-    output().warning("Warning: Initializing the printer's file system will whipe-out all")
-    output().warning("user data (e.g. stored jobs) on the volume. Press CTRL+C to abort.")
-    if output().countdown("Initializing volume " + self.vol[:2] + " in...", 10, self):
+    self.logger.warning("Warning: Initializing the printer's file system will whipe-out all")
+    self.logger.warning("user data (e.g. stored jobs) on the volume. Press CTRL+C to abort.")
+    if self.logger.countdown("Initializing volume " + self.vol[:2] + " in...", 10, self):
       self.cmd('@PJL FSINIT VOLUME="' + self.vol[0] + '"', False)
 
   # ------------------------[ disable ]---------------------------------
   def do_disable(self, arg):
     jobmedia = self.cmd('@PJL DINQUIRE JOBMEDIA') or '?'
-    if '?' in jobmedia: return output().info("Not available")
+    if '?' in jobmedia: return self.logger.info("Not available")
     elif 'ON' in jobmedia: self.do_set('JOBMEDIA=OFF', False)
     elif 'OFF' in jobmedia: self.do_set('JOBMEDIA=ON', False)
     jobmedia = self.cmd('@PJL DINQUIRE JOBMEDIA') or '?'
-    output().info("Printing is now " + jobmedia)
+    self.logger.info("Printing is now " + jobmedia)
 
   # define alias but do not show alias in help
   do_enable = do_disable
   def help_disable(self):
-    print("Disable printing functionality.")
+    self.logger.printAndWrite("Disable printing functionality.")
 
   # ------------------------[ destroy ]---------------------------------
   def do_destroy(self, arg):
     "Cause physical damage to printer's NVRAM."
-    output().warning("Warning: This command tries to cause physical damage to the")
-    output().warning("printer NVRAM. Use at your own risk. Press CTRL+C to abort.")
-    if output().countdown("Starting NVRAM write cycle loop in...", 10, self):
+    self.logger.warning("Warning: This command tries to cause physical damage to the")
+    self.logger.warning("printer NVRAM. Use at your own risk. Press CTRL+C to abort.")
+    if self.logger.countdown("Starting NVRAM write cycle loop in...", 10, self):
       self.chitchat("Dave, stop. Stop, will you? Stop, Dave. Will you stop, Dave?")
       date = conv().now() # timestamp the experiment started
       steps = 100 # number of pjl commands to send at once
@@ -516,13 +521,13 @@ class pjl(printer):
           self.do_set("COPIES=42" + arg, False)
           copies = self.cmd('@PJL DINQUIRE COPIES') or '?'
           if not copies or '?' in copies:
-            output().chitchat("I'm sorry Dave, I'm afraid I can't do that.")
-            if count > 0: output().chitchat("Device crashed?")
+            self.logger.chitchat("I'm sorry Dave, I'm afraid I can't do that.")
+            if count > 0: self.logger.chitchat("Device crashed?")
             return
           elif not '42' in copies:
             self.chitchat("\rI'm afraid. I'm afraid, Dave. Dave, my mind is going...")
             dead = conv().elapsed(conv().now() - date)
-            print("NVRAM died after " + str(count*steps) + " cycles, " + dead)
+            self.logger.printAndWrite("NVRAM died after " + str(count*steps) + " cycles, " + dead)
             return
         # force writing to nvram using by setting a variable many times
         self.chitchat("\rNVRAM write cycles:  " + str(count*steps), '')
@@ -535,9 +540,9 @@ class pjl(printer):
     self.chitchat("Setting job retention, reconnecting to see if still enabled")
     self.do_set('HOLD=ON', False)
     self.do_reconnect()
-    output().raw("Retention for future print jobs: ", '')
+    self.logger.raw("Retention for future print jobs: ", '')
     hold = self.do_info('variables', '^HOLD', False)
-    output().info(item(re.findall("=(.*)\s+\[", item(item(hold)))) or 'NOT AVAILABLE')
+    self.logger.info(item(re.findall("=(.*)\s+\[", item(item(hold)))) or 'NOT AVAILABLE')
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     ### Sagemcom printers: @PJL SET RETAIN_JOB_BEFORE_PRINT = ON
     ###                    @PJL SET RETAIN_JOB_AFTER_PRINT  = ON
@@ -578,7 +583,7 @@ class pjl(printer):
         else: self.makedirs('nvram') # create nvram directory
         data = ''.join([conv().chr(n) for n in re.findall('DATA\s*=\s*(\d+)', str_recv)])
         file().append(lpath, data) # write copy of nvram to disk
-        output().dump(data) # print asciified output to screen
+        self.logger.dump(data) # print asciified output to screen
       print
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # read nvram (single byte)
@@ -586,7 +591,7 @@ class pjl(printer):
       arg = re.split("\s+", arg, 1)
       if len(arg) > 1:
         arg, addr = arg
-        output().info(self.cmd('@PJL RNVRAM ADDRESS=' + addr))
+        self.logger.info(self.cmd('@PJL RNVRAM ADDRESS=' + addr))
       else: self.help_nvram()
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # write nvram (single byte)
@@ -602,10 +607,10 @@ class pjl(printer):
       self.help_nvram()
 
   def help_nvram(self):
-    print("NVRAM operations:  nvram <operation>")
-    print("  nvram dump [all]         - Dump (all) NVRAM to local file.")
-    print("  nvram read addr          - Read single byte from address.")
-    print("  nvram write addr value   - Write single byte to address.")
+    self.logger.printAndWrite("NVRAM operations:  nvram <operation>")
+    self.logger.printAndWrite("  nvram dump [all]         - Dump (all) NVRAM to local file.")
+    self.logger.printAndWrite("  nvram read addr          - Read single byte from address.")
+    self.logger.printAndWrite("  nvram write addr value   - Write single byte to address.")
 
   options_nvram = ('dump', 'read', 'write')
   def complete_nvram(self, text, line, begidx, endidx):
@@ -630,9 +635,9 @@ class pjl(printer):
     if '?' in passwd:   passwd   = "UNSUPPORTED"
     if '?' in cplock:   cplock   = "UNSUPPORTED"
     if '?' in disklock: disklock = "UNSUPPORTED"
-    output().info("PIN protection:  " + passwd)
-    output().info("Panel lock:      " + cplock)
-    output().info("Disk lock:       " + disklock)
+    self.logger.info("PIN protection:  " + passwd)
+    self.logger.info("Panel lock:      " + cplock)
+    self.logger.info("Disk lock:       " + disklock)
 
   # ------------------------[ unlock <pin> ]----------------------------
   def do_unlock(self, arg):
@@ -640,16 +645,16 @@ class pjl(printer):
     # first check if locking is supported by device
     str_recv = self.cmd('@PJL DINQUIRE PASSWORD')
     if not str_recv or '?' in str_recv:
-      return output().errmsg("Cannot unlock", "locking not supported by device")
+      return self.logger.errmsg("Cannot unlock", "locking not supported by device")
     # user-supplied pin vs. 'exhaustive' key search
     if not arg:
-      print("No PIN given, cracking.")
+      self.logger.printAndWrite("No PIN given, cracking.")
       keyspace = [""] + range(1, 65536) # protection can be bypassed with
     else:                               # empty password one some devices
       try:
         keyspace = [int(arg)]
       except Exception as e:
-        output().errmsg("Invalid PIN", e)
+        self.logger.errmsg("Invalid PIN", e)
         return
     # for optimal performance set steps to 500-1000 and increase timeout
     steps = 500 # set to 1 to get actual PIN (instead of just unlocking)
@@ -670,7 +675,7 @@ class pjl(printer):
       # seen hardcoded strings like 'ENABLED', 'ENABLE' and 'ENALBED' (sic!) in the wild
       if str_recv.startswith("ENA"):
         if len(keyspace) == 1:
-          output().errmsg("Cannot unlock", "Bad PIN")
+          self.logger.errmsg("Cannot unlock", "Bad PIN")
       else:
         # disable control panel lock and disk lock
         self.cmd('@PJL DEFAULT CPLOCK=OFF' + c.EOL
@@ -720,6 +725,6 @@ class pjl(printer):
       '@PJL FSMKDIR NAME="[buffer]"',
       '@PJL FSUPLOAD NAME="[buffer]"']
     for val in inputs:
-      output().raw("Buffer size: " + str(size) + ", Sending: ", val + os.linesep)
+      self.logger.raw("Buffer size: " + str(size) + ", Sending: ", val + os.linesep)
       self.timeoutcmd(val.replace('[buffer]', char*size), self.timeout*10, False)
     self.cmd("@PJL ECHO") # check if device is still reachable
