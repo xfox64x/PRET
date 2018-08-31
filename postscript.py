@@ -6,6 +6,7 @@ import re, os, sys, string, random, json, collections, time
 # local pret classes
 from printer import printer
 from operators import operators
+from capabilities import printerModelDatabase
 from helper import conv, file, item, const as c
 
 class postscript(printer):
@@ -264,7 +265,10 @@ class postscript(printer):
   # ------------------------[ id ]--------------------------------------
   def do_id(self, *arg):
     "Show device information."
-    self.logger.info(self.cmd('product print'))
+    modelString = self.cmd('product print')
+    if modelString and modelString != "":
+      printerModelDatabase().add_model("ps", modelString)
+    self.logger.info(modelString)
 
   # ------------------------[ version ]---------------------------------
   def do_version(self, *arg):
