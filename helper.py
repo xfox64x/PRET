@@ -318,12 +318,12 @@ class Logger():
   def open(self):
     if self.logFilePath:
       try:
-        print(self.logFilePath)
         # Clear the file contents
         with open(self.logFilePath, mode='wb') as f:
           f.write("")
         # Set the variabled to an open handle to the file
         self.logFileHandle = open(self.logFilePath, mode='ab')
+        print("Logging to file: %s%s" % (self.logFilePath, os.linesep))
       except IOError as e:
         self.errmsg("Cannot open logfile", e)
         return None
