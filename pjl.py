@@ -6,6 +6,7 @@ import re, os, random, posixpath, time
 # local pret classes
 from printer import printer
 from codebook import codebook
+from capabilities import printerModelDatabase
 from helper import conv, file, item, chunks, const as c
 
 class pjl(printer):
@@ -309,7 +310,14 @@ class pjl(printer):
         return match
       else:
         for line in str_recv.splitlines():
-          if arg == 'id': line = line.strip('"')
+          if arg == 'id':
+            line = line.strip('"')
+            if line and line != "":
+              printerModelDatabase().add_model("pjl", line)
+              #if printerModelDatabase().add_model("pjl", line):
+                #print("Added model to PJL device database")
+              #else:
+                #print("Did not add model to PJL device database")
           if arg == 'filesys': line = line.lstrip()
           self.logger.info(line)
     else:
