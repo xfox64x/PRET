@@ -21,7 +21,51 @@ def HTTPResponsePatch(func):
   return inner 
   
 httplib.HTTPResponse.read = HTTPResponsePatch(httplib.HTTPResponse.read)
+
+class printerModelDatabase():
+
+  #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  # get the path to the correct database of supported devices
+  def get_database_path(self, mode):
+    return os.path.join(os.path.join(os.path.dirname(os.path.realpath(__file__)), "db"), (mode + ".dat"))
+    
+  #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  # open database of supported devices
+  def get_models(self, mode):
+    try:
+      with open(printerModelDatabase().get_database_path(mode), 'r') as f:
+        models = filter(None, (line.strip() for line in f))
+      return models
+    except IOError as e:
+      output().errmsg_("Cannot open file", e)
+      return []
+    return []
+      
+  #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  # get models matching the supplied model, from the database of supported devices
+  def get_matching_models(self, mode, model):
+    #matches = filter(None, [re.findall(re.escape(m), model, re.I) for m in printerModelDatabase().get_models(mode)])
+    #print("Mode:  "+mode)
+    #print("Model: "+model)
+    #print(matches)
+    #return matches
+    return filter(None, [re.findall(re.escape(m), model, re.I) for m in printerModelDatabase().get_models(mode)])
+
+  #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  # add model to database of supported devices
+  def add_model(self, mode, model):
+    if model and len(printerModelDatabase().get_matching_models(mode, model)) == 0 and len(model.strip()) > 0:
+      try:
+        with open(printerModelDatabase().get_database_path(mode), 'a') as f:
+          f.write("%s\n" % str(model))
+        return True
+      except IOError as e:
+        output().errmsg_("Cannot open file", e)
+        return False
+    else:
+      return False
   
+
 class capabilities():
   # set defaults
   support = False
@@ -152,6 +196,7 @@ class capabilities():
     └───────────────────────────────────────────────────────┘
     '''
     self.support = filter(None, [re.findall(re.escape(m), model, re.I) for m in self.models])
+    #print(self.support)
 
   #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   # open database of supported devices
