@@ -5,7 +5,7 @@ import re, os, sys, cmd, glob, errno, random, ntpath
 import posixpath, hashlib, tempfile, subprocess
 
 # local pret classes
-from helper import log, output, conv, file, item, conn, const as c
+from helper import Logger, conv, file, item, conn, const as c
 from discovery import discovery
 from fuzzer import fuzzer
 
@@ -16,7 +16,8 @@ class printer(cmd.Cmd, object):
   offline_str = "Not connected."
   undoc_header = None
   # do not change
-  logfile = None
+  logfilepath = None
+  logger = None
   debug = False
   status = False
   quiet = False
@@ -35,20 +36,32 @@ class printer(cmd.Cmd, object):
 
   # --------------------------------------------------------------------
   def __init__(self, args):
-    # init cmd module
-    cmd.Cmd.__init__(self)
+    self.target = args.target
     self.debug = args.debug # debug mode
     self.quiet = args.quiet # quiet mode
     self.mode  = args.mode  # command mode
-    # connect to device
-    self.do_open(args.target, 'init')
+    self.logger = Logger()
+    
+    if args.Log == True:
+      self.logfilepath = os.path.join(os.getcwd(),("%s_PRET_Log.txt" % (self.target)))
+    elif args.log:
+      self.logfilepath = args.log
+    
     # log pjl/ps cmds to file
-    if args.log:
-      self.logfile = log().open(args.log)
+    if self.logfilepath:
+      self.logger.setLogFilePath(self.logfilepath)
       header = None
       if self.mode == 'ps': header = c.PS_HEADER
       if self.mode == 'pcl': header = c.PCL_HEADER
-      if header: log().write(self.logfile, header + os.linesep)
+      self.logger.write(("[%s -- PRET Session Starting]" % self.logger.getTimestamp()))
+      if header: self.logger.write((header + os.linesep))
+    
+    # init cmd module
+    cmd.Cmd.__init__(self)
+    
+    # connect to device
+    self.do_open(args.target, 'init')
+    
     # run pret cmds from file
     if args.load:
       self.do_load(args.load)
@@ -71,16 +84,118 @@ class printer(cmd.Cmd, object):
   # show message for unknown commands
   def default(self, line):
     if line and line[0] != "#": # interpret as comment
-      output().chitchat("Unknown command: '" + line + "'")
+      self.logger.chitchat("Unknown command: '" + line + "'")
 
-  # suppress help message for undocumented commands
+  # Overloaded print_topics that suppresses help message for undocumented commands.
   def print_topics(self, header, cmds, cmdlen, maxcol):
     if header is not None:
-      cmd.Cmd.print_topics(self, header, cmds, cmdlen, maxcol)
+      cmd.Cmd.print_topics(self, header, cmds, cmdlen, maxcol)      
+      
+  # Copied and modified from python/trunk/Lib/cmd.py
+  # print_topics modified to write out to a log, instead of print.
+  def print_topicz(self, header, cmds, cmdlen, maxcol):
+    if header is not None:
+      self.logger.write("%s%s" % (str(header), os.linesep))
+      self.logger.write("%s%s" % (str("=" * len(header)), os.linesep))
+      self.logger.write(self.columnized(cmds, maxcol-1))
+      self.logger.write(os.linesep)
 
+  # Copied and modified from python/trunk/Lib/cmd.py
+  # Columnize customized to return a formatted string, instead of printing it.
+  def columnized(self, list, displaywidth=80):
+    output = ""
+    if not list:
+      output += "<empty>" + os.linesep
+      return output
+    nonstrings = [i for i in range(len(list)) if not isinstance(list[i], str)]
+    if nonstrings:
+      return output
+    size = len(list)
+    if size == 1:
+      output += ('%s%s' % (str(list[0]), os.linesep))
+      return output
+    for nrows in range(1, len(list)):
+      ncols = (size+nrows-1) // nrows
+      colwidths = []
+      totwidth = -2
+      for col in range(ncols):
+        colwidth = 0
+        for row in range(nrows):
+          i = row + nrows*col
+          if i >= size:
+            break
+          x = list[i]
+          colwidth = max(colwidth, len(x))
+        colwidths.append(colwidth)
+        totwidth += colwidth + 2
+        if totwidth > displaywidth:
+          break
+      if totwidth <= displaywidth:
+        break
+    else:
+      nrows = len(list)
+      ncols = 1
+      colwidths = [0]
+    for row in range(nrows):
+      texts = []
+      for col in range(ncols):
+        i = row + nrows*col
+        if i >= size:
+          x = ""
+        else:
+          x = list[i]
+        texts.append(x)
+      while texts and not texts[-1]:
+        del texts[-1]
+      for col in range(len(texts)):
+        texts[col] = texts[col].ljust(colwidths[col])
+      output += ("%s%s" % (str("  ".join(texts)), os.linesep))
+    return output      
+
+  # Overloaded and enhanced do_help to write output to log file, instead of print.
+  def do_help(self, arg):
+    if arg:
+      try:
+        func = getattr(self, 'help_' + arg)
+      except AttributeError:
+        try:
+          doc = getattr(self, 'do_' + arg).__doc__
+          if doc:
+            self.logger.write("%s%s" % (str(doc), os.linesep))
+          else:
+            self.logger.write("*** No help on %s ***%s" % (str(arg), os.linesep))
+        except AttributeError:
+          self.logger.write("*** No help on %s ***%s" % (str(arg), os.linesep))
+          pass
+    else:
+      names = dir(self.__class__)
+      cmds_doc = []
+      cmds_undoc = []
+      help = {}
+      for name in names:
+        if name[:5] == 'help_':
+          help[name[5:]]=1
+      names.sort()
+      prevname = ''
+      for name in names:
+        if name[:3] == 'do_':
+          if name == prevname:
+            continue
+          prevname = name
+          cmdstr=name[3:]
+          if cmdstr in help:
+            cmds_doc.append(cmdstr)
+            del help[cmdstr]
+          elif getattr(self, name).__doc__:
+            cmds_doc.append(cmdstr)
+          else:
+            cmds_undoc.append(cmdstr)
+      self.print_topicz("Documented commands (type help <topic>):",   cmds_doc,   15,80)
+    cmd.Cmd.do_help(self, arg)
+      
   # supress some chit-chat in quiet mode
   def chitchat(self, *args):
-    if not self.quiet: output().chitchat(*args)
+    if not self.quiet: self.logger.chitchat(*args)
 
   # --------------------------------------------------------------------
   # code to be executed before command line is interpreted
@@ -88,40 +203,56 @@ class printer(cmd.Cmd, object):
     # commands that can be run offline
     off_cmd = ['#', '?', 'help', 'exit', 'quit', 'EOF', 'timeout',
                'mode', 'load', 'loop', 'discover', 'open', 'debug']
+    
     # remove whitepaces
     line = line.strip()
+    
+    target = self.target + ":" if self.conn else ""
+    cwd = self.cwd if self.conn else ""
+    self.prompt = target + c.SEP + cwd + "> "
+    
+    if line and len(line) > 0:
+        self.logger.write(("%s - %s%s%s> %s%s" % (self.logger.getTimestamp(), (self.target + ":" if self.conn else ""), c.SEP, (self.cwd if self.conn else ""), line, os.linesep)))
+        
     if line and line.split()[0] not in off_cmd:
-      # write non-empty lines to logfile
-      log().comment(self.logfile, line)
       # only let "offline" functions pass if not connected
       if self.conn == None:
-        print(self.offline_str)
+        self.logger.printAndWrite(self.offline_str)
         return os.linesep
+        
     # finally return original command
     return line
 
   # --------------------------------------------------------------------
   # catch-all wrapper to guarantee continuation on unhandled exceptions
   def onecmd(self, line):
-    try:
-      cmd.Cmd.onecmd(self, line)
-    except Exception as e:
-      output().errmsg("Program Error", e)
-
+    if line:
+      try:
+        cmd.Cmd.onecmd(self, line)
+      except Exception as e:
+        self.logger.errmsg("Program Error", e)
+        raise
+      
+    off_cmd = ['#', '?', 'help', 'exit', 'quit', 'EOF', 'timeout',
+               'mode', 'load', 'loop', 'discover', 'open', 'debug']
+      
+    if line and len(line.strip()) > 0 and line.split()[0] not in off_cmd:
+      self.logger.write(os.linesep)
   # ====================================================================
 
   # ------------------------[ exit ]------------------------------------
   def do_exit(self, *arg):
+    self.logger.write(("[%s -- PRET Session Exiting]" % self.logger.getTimestamp()))
+    
     # close logfile
-    if self.logfile:
-      log().close(self.logfile)
+    self.logger.close()
     sys.exit()
 
   # define alias but do not show alias in help
   do_quit = do_exit
   do_EOF  = do_exit
   def help_exit(self):
-    print("Exit the interpreter.")
+    self.logger.printAndWrite("Exit the interpreter.")
 
   # ------------------------[ debug ]-----------------------------------
   def do_debug(self, arg):
@@ -130,7 +261,7 @@ class printer(cmd.Cmd, object):
     # set hex mode (= ascii + hexdump)
     if arg == 'hex': self.debug = 'hex'
     if self.conn: self.conn.debug = self.debug
-    print("Debug mode on" if self.debug else "Debug mode off")
+    self.logger.printAndWrite("Debug mode on" if self.debug else "Debug mode off")
 
   # ====================================================================
 
@@ -142,7 +273,8 @@ class printer(cmd.Cmd, object):
     data = file().read(arg) or ""
     for cmd in data.splitlines():
       # simulate command prompt
-      print(self.prompt + cmd)
+      self.logger.printAndWrite(self.prompt + cmd)
+      self.logger.write((self.prompt + cmd))
       # execute command with premcd
       self.onecmd(self.precmd(cmd))
 
@@ -153,7 +285,7 @@ class printer(cmd.Cmd, object):
     if len(args) > 1:
       cmd = args.pop(0)
       for arg in args:
-        output().chitchat("Executing command: '" + cmd + " " + arg + "'")
+        self.logger.chitchat("Executing command: '" + cmd + " " + arg + "'")
         self.onecmd(cmd + " " + arg)
     else:
       self.onecmd("help loop")
@@ -172,23 +304,26 @@ class printer(cmd.Cmd, object):
       arg = raw_input("Target: ")
     # open connection
     try:
+      if not self.quiet and mode != 'reconnect':
+        self.logger.write("[%s - Establishing initial connection with: %s]" % (self.logger.getTimestamp(), self.target))
       newtarget = (arg != self.target)
       self.target = arg # set new target
       self.conn = conn(self.mode, self.debug, self.quiet)
       self.conn.timeout(self.timeout)
       self.conn.open(arg)
-      print("Connection to " + arg + " established")
+      self.logger.printAndWrite("Connection to " + arg + " established")
       # hook method executed after successful connection
       self.on_connect(mode)
       # show some information about the device
       if not self.quiet and mode != 'reconnect':
         sys.stdout.write("Device:   ");
+        self.logger.write("[%s - Established initial connection with: %s]" % (self.logger.getTimestamp(), self.target))
         self.do_id()
-      print("")
+      self.logger.printAndWrite("")
       # set printer default values
       self.set_defaults(newtarget)
     except Exception as e:
-      output().errmsg("Connection to " + arg + " failed", e)
+      self.logger.errmsg("Connection to " + arg + " failed", e)
       self.do_close()
       # exit if run from init function (command line)
       if mode == 'init':
@@ -208,7 +343,7 @@ class printer(cmd.Cmd, object):
     if self.conn:
       self.conn.close()
       self.conn = None
-    print("Connection closed.")
+    self.logger.printAndWrite("Connection closed.")
     self.set_prompt()
 
   # ------------------------[ timeout <seconds> ]-----------------------
@@ -219,9 +354,9 @@ class printer(cmd.Cmd, object):
         if self.conn: self.conn.timeout(float(arg))
         self.timeout = float(arg)
       if not quiet:
-        print("Device or socket timeout: " + str(self.timeout))
+        self.logger.printAndWrite("Device or socket timeout: " + str(self.timeout))
     except Exception as e:
-      output().errmsg("Cannot set timeout", e)
+      self.logger.errmsg("Cannot set timeout", e)
 
   # send mode-specific command whith modified timeout
   def timeoutcmd(self, str_send, timeout, *stuff):
@@ -239,7 +374,7 @@ class printer(cmd.Cmd, object):
   # re-open connection
   def reconnect(self, msg):
     # on incomplete command show error message
-    if msg: output().errmsg("Command execution failed", msg)
+    if msg: self.logger.errmsg("Command execution failed", msg)
     sys.stdout.write(os.linesep + "Forcing reconnect. ")
     # workaround to flush socket buffers
     self.do_close()
@@ -250,7 +385,7 @@ class printer(cmd.Cmd, object):
   # --------------------------------------------------------------------
   # dummy functions to overwrite
   def on_connect(self, mode): pass
-  def do_id(self, *arg): output().info("Unknown printer")
+  def do_id(self, *arg): self.logger.info("Unknown printer")
 
   # ====================================================================
 
@@ -258,7 +393,7 @@ class printer(cmd.Cmd, object):
   def do_pwd(self, arg):
     "Show working directory on remote device."
     path = ('' if self.vol else c.SEP) + self.rpath()
-    output().raw(path)
+    self.logger.raw(path)
 
   # ------------------------[ chvol <volume> ]--------------------------
   def do_chvol(self, arg):
@@ -268,9 +403,9 @@ class printer(cmd.Cmd, object):
     if arg and self.vol_exists(arg):
       if self.mode == 'ps':  self.set_vol('%' + arg.strip('%') + '%')
       if self.mode == 'pjl': self.set_vol(arg[0] + ':' + c.SEP)
-      print("Volume changed to " + self.vol)
+      self.logger.printAndWrite("Volume changed to " + self.vol)
     else:
-      print("Volume not available")
+      self.logger.printAndWrite("Volume not available")
 
   # set volume
   def set_vol(self, vol=""):
@@ -296,9 +431,9 @@ class printer(cmd.Cmd, object):
     "Set path traversal:  traversal <path>"
     if not arg or self.dir_exists(self.tpath(arg)):
       self.set_traversal(arg)
-      print("Path traversal " + ("" if arg else "un") + "set.")
+      self.logger.printAndWrite("Path traversal " + ("" if arg else "un") + "set.")
     else:
-      print("Cannot use this path traversal.")
+      self.logger.printAndWrite("Cannot use this path traversal.")
 
   # set path traversal
   def set_traversal(self, traversal=''):
@@ -310,11 +445,11 @@ class printer(cmd.Cmd, object):
     "Change remote working directory:  cd <path>"
     if not self.cpath(arg) or self.dir_exists(self.rpath(arg)):
       if re.match("^[\." + c.SEP + "]+$", self.cpath(arg)):
-        output().raw("*** Congratulations, path traversal found ***")
-        output().chitchat("Consider setting 'traversal' instead of 'cd'.")
+        self.logger.raw("*** Congratulations, path traversal found ***")
+        self.logger.chitchat("Consider setting 'traversal' instead of 'cd'.")
       self.set_cwd(arg)
     else:
-      print("Failed to change directory.")
+      self.logger.printAndWrite("Failed to change directory.")
 
   # set current working directory
   def set_cwd(self, cwd=''):
@@ -361,7 +496,7 @@ class printer(cmd.Cmd, object):
   def rpath(self, path=""):
     # warn if path contains volume information
     if (path.startswith("%") or path.startswith('0:')) and not self.fuzz:
-      output().warning("Do not refer to disks directly, use chvol.")
+      self.logger.warning("Do not refer to disks directly, use chvol.")
     # in fuzzing mode leave remote path as it is
     if self.fuzz: return path
     # prepend volume information to virtual path
@@ -409,13 +544,13 @@ class printer(cmd.Cmd, object):
       # write to local file
       file().write(lpath, data)
       if lsize == rsize:
-        print(str(lsize) + " bytes received.")
+        self.logger.printAndWrite(str(lsize) + " bytes received.")
       else:
         self.size_mismatch(rsize, lsize)
 
   def size_mismatch(self, size1, size2):
     size1, size2 = str(size1), str(size2)
-    print("Size mismatch (should: " + size1 + ", is: " + size2 + ").")
+    self.logger.printAndWrite("Size mismatch (should: " + size1 + ", is: " + size2 + ").")
 
   # ------------------------[ put <local file> ]------------------------
   def do_put(self, arg, rpath=""):
@@ -433,9 +568,9 @@ class printer(cmd.Cmd, object):
       lsize = len(data)
       rsize = self.file_exists(rpath)
       if rsize == lsize:
-        print(str(rsize) + " bytes transferred.")
+        self.logger.printAndWrite(str(rsize) + " bytes transferred.")
       elif rsize == c.NONEXISTENT:
-        print("Permission denied.")
+        self.logger.printAndWrite("Permission denied.")
       else:
         self.size_mismatch(lsize, rsize)
 
@@ -469,7 +604,7 @@ class printer(cmd.Cmd, object):
   do_rm = do_delete
   do_rmdir = do_delete
   def help_delete(self):
-    print("Delete remote file:  delete <file>")
+    self.logger.printAndWrite("Delete remote file:  delete <file>")
 
   # ------------------------[ cat <file> ]------------------------------
   def do_cat(self, arg):
@@ -480,7 +615,7 @@ class printer(cmd.Cmd, object):
     str_recv = self.get(path)
     if str_recv != c.NONEXISTENT:
       rsize, data = str_recv
-      output().raw(data.strip())
+      self.logger.raw(data.strip())
 
   # ------------------------[ edit <file> ]-----------------------------
   def do_edit(self, arg):
@@ -496,17 +631,17 @@ class printer(cmd.Cmd, object):
       # get md5sum for edited file
       chksum2 = hashlib.md5(open(lpath,'rb').read()).hexdigest()
       # upload file, if changed
-      if chksum1 == chksum2: print("File not changed.")
+      if chksum1 == chksum2: self.logger.printAndWrite("File not changed.")
       else: self.do_put(lpath, arg)
     except Exception as e:
-      output().errmsg("Cannot edit file - Set self.editor", e)
+      self.logger.errmsg("Cannot edit file - Set self.editor", e)
     # delete temporary file
     os.remove(lpath)
 
   # define alias but do not show alias in help
   do_vim = do_edit
   def help_edit(self):
-    print("Edit remote files with our favorite editor:  edit <file>")
+    self.logger.printAndWrite("Edit remote files with our favorite editor:  edit <file>")
 
   # ------------------------[ mirror <path> ]---------------------------
   def mirror(self, name, size):
@@ -532,10 +667,10 @@ class printer(cmd.Cmd, object):
     lpath = re.sub(r'(\.)+' + c.SEP, '', lpath)
     # abort if we are still out of the mirror root
     if not os.path.realpath(lpath).startswith(root):
-      output().errmsg("Not saving data out of allowed path",
+      self.logger.errmsg("Not saving data out of allowed path",
               "I'm sorry Dave, I'm afraid I can't do that.")
     elif size: # download current file
-      output().raw(self.vol + name + " -> " + lpath)
+      self.logger.raw(self.vol + name + " -> " + lpath)
       self.makedirs(os.path.dirname(lpath))
       self.do_get(self.vol + name, lpath, False)
     else:      # create current directory
@@ -590,23 +725,23 @@ class printer(cmd.Cmd, object):
       self.help_fuzz()
 
   def fuzz_path(self):
-    output().raw("Checking base pathes first.")
+    self.logger.raw("Checking base pathes first.")
     # get a cup of coffee, fuzzing will take some time
-    output().fuzzed('PATH', '', ('', 'EXISTS',  'DIRLIST'))
-    output().hline()
+    self.logger.fuzzed('PATH', '', ('', 'EXISTS',  'DIRLIST'))
+    self.logger.hline()
     found = {} # pathes found
     # try base pathes first
     for path in self.vol_exists() + fuzzer().path:
       self.verify_path(path, found)
-    output().raw("Checking filesystem hierarchy standard.")
+    self.logger.raw("Checking filesystem hierarchy standard.")
     # try direct access to fhs dirs
     for path in fuzzer().fhs:
       self.verify_path(path)
     # try path traversal strategies
     if found:
-      output().raw("Now checking traversal strategies.")
-      output().fuzzed('PATH', '', ('', 'EXISTS',  'DIRLIST'))
-      output().hline()
+      self.logger.raw("Now checking traversal strategies.")
+      self.logger.fuzzed('PATH', '', ('', 'EXISTS',  'DIRLIST'))
+      self.logger.hline()
       # only check found volumes
       for vol in found:
         sep  = '' if vol[-1:] in ['', '/', '\\' ] else '/'
@@ -621,10 +756,10 @@ class printer(cmd.Cmd, object):
             self.verify_path(path)
 
   def fuzz_write(self):
-    output().raw("Writing temporary files.")
+    self.logger.raw("Writing temporary files.")
     # get a cup of tea, fuzzing will take some time
-    output().fuzzed('PATH', 'COMMAND', ('GET', 'EXISTS', 'DIRLIST'))
-    output().hline()
+    self.logger.fuzzed('PATH', 'COMMAND', ('GET', 'EXISTS', 'DIRLIST'))
+    self.logger.hline()
     # test data to put/append
     data = "test"; data2 = "test2"
     # try write to disk strategies
@@ -640,17 +775,17 @@ class printer(cmd.Cmd, object):
       self.verify_write(vol + sep, name, data, 'APPEND')
       # FSDELETE
       self.do_delete(vol + sep + name)
-      output().hline()
+      self.logger.hline()
 
   def fuzz_blind(self):
-    output().raw("Blindly trying to read files.")
+    self.logger.raw("Blindly trying to read files.")
     # get a bottle of beer, fuzzing will take some time
-    output().fuzzed('PATH', '', ('', 'GET', 'EXISTS'))
-    output().hline()
+    self.logger.fuzzed('PATH', '', ('', 'GET', 'EXISTS'))
+    self.logger.hline()
     # try blind file access strategies (relative path)
     for path in fuzzer().rel:
       self.verify_blind(path, "")
-    output().hline()
+    self.logger.hline()
     # try blind file access strategies (absolute path)
     for vol in self.vol_exists() + fuzzer().blind:
       sep  = '' if vol[-1:] in ['', '/', '\\' ] else '/'
@@ -663,7 +798,7 @@ class printer(cmd.Cmd, object):
         self.verify_blind(path, file)
         # vol name out of range error
         if self.error == '30054':
-          output().raw("Volume nonexistent, skipping.")
+          self.logger.raw("Volume nonexistent, skipping.")
           break
         # no directory traversal
         for dir in fuzzer().dir:
@@ -680,12 +815,12 @@ class printer(cmd.Cmd, object):
     dir2 = self.dirlist(path, False)
     opt2 = (True if dir2 else False)
     # show fuzzing results
-    output().fuzzed(path, "", ('', opt1, opt2))
+    self.logger.fuzzed(path, "", ('', opt1, opt2))
     if opt2: # DIRLIST successful
       # add path if not already listed
       if dir2 not in found.values():
         found[path] = dir2
-        output().raw("Listing directory.")
+        self.logger.raw("Listing directory.")
         self.do_ls(path)
     elif opt1: # only EXISTS successful
       found[path] = None
@@ -699,7 +834,7 @@ class printer(cmd.Cmd, object):
     # 3rd method: DIRLIST
     opt3 = (name in self.dirlist(path, False))
     # show fuzzing results
-    output().fuzzed(path+name, cmd, (opt1, opt2, opt3))
+    self.logger.fuzzed(path+name, cmd, (opt1, opt2, opt3))
     return opt1
 
   # check for remote files (blind)
@@ -710,13 +845,13 @@ class printer(cmd.Cmd, object):
     # 2nd method: EXISTS
     opt2 = (self.file_exists(path+name) != c.NONEXISTENT)
     # show fuzzing results
-    output().fuzzed(path+name, "", ('', opt1, opt2))
+    self.logger.fuzzed(path+name, "", ('', opt1, opt2))
 
   def help_fuzz(self):
-    print("File system fuzzing:  fuzz <category>")
-    print("  fuzz path   - Explore fs structure with path traversal strategies.")
-    print("  fuzz write  - First put/append file, then check for its existence.")
-    print("  fuzz blind  - Read-only tests for existing files like /etc/passwd.")
+    self.logger.printAndWrite("File system fuzzing:  fuzz <category>")
+    self.logger.printAndWrite("  fuzz path   - Explore fs structure with path traversal strategies.")
+    self.logger.printAndWrite("  fuzz write  - First put/append file, then check for its existence.")
+    self.logger.printAndWrite("  fuzz blind  - Read-only tests for existing files like /etc/passwd.")
 
   options_fuzz = ('path', 'write', 'blind')
   def complete_fuzz(self, text, line, begidx, endidx):
@@ -730,7 +865,7 @@ class printer(cmd.Cmd, object):
     if not arg:
       arg = raw_input("Command: ")
     str_recv = self.cmd(arg)
-    output().info(str_recv)
+    self.logger.info(str_recv)
 
   # ------------------------[ print <file>|"text" ]----------------------------
   def do_print(self, arg):
@@ -764,5 +899,5 @@ class printer(cmd.Cmd, object):
       p = subprocess.Popen(cmd, stdout=out, stderr=err)
       data, stderr = p.communicate()
     except: stderr = "ImageMagick or Ghostscript missing"
-    if stderr: output().errmsg("Cannot convert", stderr)
+    if stderr: self.logger.errmsg("Cannot convert", stderr)
     else: return data
