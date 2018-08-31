@@ -5,13 +5,15 @@ from __future__ import print_function
 from socket import socket
 import sys, os, re, stat, math, time, datetime
 
+
 # third party modules
 try: # unicode monkeypatch for windoze
   import win_unicode_console
   win_unicode_console.enable()
 except:
   msg = "Please install the 'win_unicode_console' module."
-  if os.name == 'nt': print(msg)
+  if os.name == 'nt': 
+    print(msg)
 
 try: # os independent color support
   from colorama import init, Fore, Back, Style
@@ -54,9 +56,9 @@ class log():
   # open logfile
   def open(self, filename):
     try:
-      return open(filename, mode='wb')
+      return open(filename, mode='ab')
     except IOError as e:
-      output().errmsg("Cannot open logfile", e)
+      output().errmsg_("Cannot open logfile", e)
       return None
 
   # write raw data to logfile
@@ -66,7 +68,7 @@ class log():
       try:
         logfile.write(data)
       except IOError as e:
-        output().errmsg("Cannot log", e)
+        output().errmsg_("Cannot log", e)
 
   # write comment to logfile
   def comment(self, logfile, line):
@@ -76,58 +78,69 @@ class log():
   # close logfile
   def close(self, logfile):
     try:
+      logfile.flush()
       logfile.close()
     except IOError as e:
-      output().errmsg("Cannot close logfile", e)
+      output().errmsg_("Cannot close logfile", e)
 
 # ----------------------------------------------------------------------
 
+# Old output() class is still used by discovery.py and capabilities.py
+# Anything that wants to have formatted output before a printer object is created should use this.
 class output():
   # show send commands (debug mode)
-  def send(self, str, mode):
-    if str: print(Back.CYAN + str + Style.RESET_ALL)
+  def send_(self, str, mode):
+    if str: 
+      print(Back.CYAN + str + Style.RESET_ALL)
     if str and mode == 'hex':
       print(Fore.CYAN + conv().hex(str, ':') + Style.RESET_ALL)
-
+      
   # show recv commands (debug mode)
-  def recv(self, str, mode):
-    if str: print(Back.MAGENTA + str + Style.RESET_ALL)
+  def recv_(self, str, mode):
+    if str: 
+      print(Back.MAGENTA + str + Style.RESET_ALL)
     if str and mode == 'hex':
-      print(Fore.MAGENTA + conv().hex(str, ':') + Style.RESET_ALL)
+      print(Fore.MAGENTA + conv().hex(str, ':') + Style.RESET_ALL)  
 
   # show information
-  def info(self, msg, eol=None):
-    if msg: print(Back.BLUE + msg + Style.RESET_ALL, end=eol)
-    sys.stdout.flush()
+  def info_(self, msg, eol=None):
+    if msg: 
+      print(Back.BLUE + msg + Style.RESET_ALL, end=eol)
+    sys.stdout.flush()    
 
   # show raw data
-  def raw(self, msg, eol=None):
-    if msg: print(Fore.YELLOW + msg + Style.RESET_ALL, end=eol)
-    sys.stdout.flush()
-
+  def raw_(self, msg, eol=None):
+    if msg: 
+      print(Fore.YELLOW + msg + Style.RESET_ALL, end=eol)
+    sys.stdout.flush()    
+    
   # show chit-chat
-  def chitchat(self, msg, eol=None):
-    if msg: print(Style.DIM + msg + Style.RESET_ALL, end=eol)
+  def chitchat_(self, msg, eol=None):
+    if msg: 
+      print(Style.DIM + msg + Style.RESET_ALL, end=eol)
     sys.stdout.flush()
 
   # show warning message
-  def warning(self, msg):
-    if msg: print(Back.RED + msg + Style.RESET_ALL)
+  def warning_(self, msg):
+    if msg: 
+      print(Back.RED + msg + Style.RESET_ALL)
 
   # show green message
-  def green(self, msg):
-    if msg: print(Back.GREEN + msg + Style.RESET_ALL)
+  def green_(self, msg):
+    if msg: 
+      print(Back.GREEN + msg + Style.RESET_ALL)
 
   # show error message
-  def errmsg(self, msg, info=""):
+  def errmsg_(self, msg, info=""):
     info = str(info).strip()
     if info: # monkeypatch to make python error message less ugly
       info = item(re.findall('Errno -?\d+\] (.*)', info), '') or info.splitlines()[-1]
       info = Style.RESET_ALL + Style.DIM + " (" + info.strip('<>') + ")" + Style.RESET_ALL
-    if msg: print(Back.RED + msg + info)
+    if msg: 
+      print(Back.RED + msg + info)   
 
   # show printer and status
-  def discover(self, (ipaddr, (device, uptime, status, prstat))):
+  def discover_(self, (ipaddr, (device, uptime, status, prstat))):
     ipaddr = output().strfit(ipaddr, 15)
     device = output().strfit(device, 27)
     uptime = output().strfit(uptime,  8)
@@ -139,40 +152,43 @@ class output():
     if prstat == '4': status = Back.GREEN  + status + Back.BLUE # testing
     if prstat == '5': status = Back.RED    + status + Back.BLUE # down
     line = (ipaddr, device, uptime, status)
-    output().info('%-15s  %-27s  %-8s  %-23s' % line)
+    output().info_('%-15s  %-27s  %-8s  %-23s' % line)
 
-  # recursively list files
-  def psfind(self, name):
+  def psfind_(self, name):
     vol = Style.DIM + Fore.YELLOW + item(re.findall("^(%.*%)", name)) + Style.RESET_ALL
     name = Fore.YELLOW + const.SEP + re.sub("^(%.*%)", '', name) + Style.RESET_ALL
     print("%s %s" % (vol, name))
 
   # show directory listing
-  def psdir(self, isdir, size, mtime, name, otime):
+  def psdir_(self, isdir, size, mtime, name, otime):
     otime = Style.DIM + "(created " + otime + ")" + Style.RESET_ALL 
     vol = Style.DIM + Fore.YELLOW + item(re.findall("^(%.*%)", name)) + Style.RESET_ALL
     name = re.sub("^(%.*%)", '', name) # remove volume information from filename
     name = Style.BRIGHT + Fore.BLUE + name + Style.RESET_ALL if isdir else name
-    if isdir: print("d %8s   %s %s %s %s" % (size, mtime, otime, vol, name))
-    else:     print("- %8s   %s %s %s %s" % (size, mtime, otime, vol, name))
+    if isdir: 
+      print("d %8s   %s %s %s %s" % (size, mtime, otime, vol, name))
+    else:     
+      print("- %8s   %s %s %s %s" % (size, mtime, otime, vol, name)) 
 
   # show directory listing
-  def pjldir(self, name, size):
+  def pjldir_(self, name, size):
     name = name if size else Style.BRIGHT + Fore.BLUE + name + Style.RESET_ALL
-    if size: print("- %8s   %s" % (size, name))
-    else:    print("d %8s   %s" % ("-", name))
-
+    if size: 
+      print("- %8s   %s" % (size, name))
+    else:    
+      print("d %8s   %s" % ("-", name))
+      
   # show directory listing
-  def pcldir(self, size, mtime, id, name):
+  def pcldir_(self, size, mtime, id, name):
     id = Style.DIM + "(macro id: " + id + ")" + Style.RESET_ALL
     print("- %8s   %s %s %s" % (size, mtime, id, name))
 
   # show output from df
-  def df(self, args):
-    self.info("%-16s %-11s %-11s %-9s %-10s %-8s %-9s %-10s %-10s" % args)
-
+  def df_(self, args):
+    output().info_("%-16s %-11s %-11s %-9s %-10s %-8s %-9s %-10s %-10s" % args)    
+    
   # show fuzzing results
-  def fuzzed(self, path, cmd, opt):
+  def fuzzed_(self, path, cmd, opt):
       opt1, opt2, opt3 = opt
       if isinstance(opt1, bool): opt1 = (Back.GREEN + str(opt1) + Back.BLUE + "   ")\
                                  if opt1 else (Back.RED + str(opt1) + Back.BLUE + "  ")
@@ -181,34 +197,34 @@ class output():
       if isinstance(opt3, bool): opt3 = (Back.GREEN + str(opt3) + Back.BLUE + "   ")\
                                  if opt3 else (Back.RED + str(opt3) + Back.BLUE + "  ")
       opt = opt1, opt2, opt3
-      self.info("%-35s %-12s %-7s %-7s %-7s" % ((path, cmd) + opt))
+      output().info_("%-35s %-12s %-7s %-7s %-7s" % ((path, cmd) + opt))      
 
   # show captured jobs
-  def joblist(self, (date, size, user, name, soft)):
+  def joblist_(self, (date, size, user, name, soft)):
     user = output().strfit(user, 13)
     name = output().strfit(name, 22)
     soft = output().strfit(soft, 20)
     line = (date, size, user, name, soft)
-    output().info('%-12s %5s  %-13s  %-22s  %-20s' % line)
+    output().info_('%-12s %5s  %-13s  %-22s  %-20s' % line)
 
   # show ascii only
-  def ascii(self, data):
+  def ascii_(self, data):
     data = re.sub(r"(\x00){10}", "\x00", data) # shorten nullbyte streams
     data = re.sub(r"([^ -~])", ".", data) # replace non-printable chars
-    self.raw(data, "")
-
+    self.raw_(data, "")    
+    
   # show binary dump
-  def dump(self, data):
+  def dump_(self, data):
     # experimental regex to match sensitive strings like passwords
     data = re.sub(r"[\x00-\x06,\x1e]([!-~]{6,}?(?!\\0A))\x00{16}", "START" + r"\1" + "STOP", data)
     data = re.sub(r"\00+", "\x00", data) # ignore nullbyte streams
     data = re.sub(r"(\x00){10}", "\x00", data) # ignore nullbyte streams
     data = re.sub(r"([\x00-\x1f,\x7f-\xff])", ".", data)
     data = re.sub(r"START([!-~]{6,}?)STOP", Style.RESET_ALL + Back.BLUE + r"\1" + Style.RESET_ALL + Fore.YELLOW, data)
-    self.raw(data, "")
+    self.raw_(data, "")    
 
   # dump ps dictionary
-  def psdict(self, data, indent=''):
+  def psdict_(self, data, indent=''):
     reload(sys) # workaround for non-ascii output
     sys.setdefaultencoding('UTF8')
     # convert list to dictionary with indices as keys
@@ -237,14 +253,14 @@ class output():
       # output current node in dictionary
       print("%s%s %-3s  %-11s  %-30s  %s" % (edge, node, perms, type, key, value))
       if recursion: # ...
-        self.psdict(val['value'], indent + (' ' if key == last else '│'))
+        self.psdict_(val['value'], indent + (' ' if key == last else '│'))        
 
   # show some information
-  def psonly(self):
-   self.chitchat("Info: This only affects jobs printed by a PostScript driver")
+  def psonly_(self):
+   self.chitchat_("Info: This only affects jobs printed by a PostScript driver")   
 
   # countdown from sec to zero
-  def countdown(self, msg, sec, cmd):
+  def countdown_(self, msg, sec, cmd):
     try:
       sys.stdout.write(msg)
       for x in reversed(range(1, sec+1)):
@@ -254,9 +270,311 @@ class output():
       print(" KABOOM!")
       return True
     except KeyboardInterrupt:
-      print("")
+      print("")    
 
-  # show horizontal line
+  # show horizontal line 
+  def hline_(self, len=72):
+    self.info_("─" * len)    
+    
+  # crop/pad string to fixed length
+  def strfit(self, str, max):
+    str = str.strip() or "-"
+    if str.startswith('(') and str.endswith(')'): str = str[1:-1]
+    # crop long strings
+    if len(str) > max:
+      str = str[0:max-1] + "…"
+    # pad short strings
+    return str.ljust(max)
+
+# ----------------------------------------------------------------------
+
+# This is the new pile of trash logger that takes functions from output() and log() and turns
+#   them into a more stateful logging capability for writing to the console and out to files.
+class Logger():
+  import time
+  logFilePath = None
+  logFileHandle = None
+  debugLevel = 0
+  
+  def __init__(self):
+    self.debugLevel = 0
+    
+  def getTimestamp(self):
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+    
+  def setLogFilePath(self, logFilePathArg):
+    self.logFilePath = logFilePathArg
+    if self.logFilePath:
+      self.open()
+
+  def stripColor(self, inputString):
+    return inputString.replace(Back.BLUE,'').replace(Back.CYAN,'')\
+      .replace(Back.CYAN,'').replace(Back.GREEN,'').replace(Back.MAGENTA,'').replace(Back.RED,'')\
+      .replace(Fore.BLUE,'').replace(Fore.CYAN,'').replace(Fore.MAGENTA,'').replace(Fore.YELLOW,'')\
+      .replace(Style.DIM,'').replace(Style.BRIGHT,'').replace(Style.RESET_ALL,'').replace(Style.NORMAL,'')
+      
+  # ----------------------------------------------------------------------  
+  # open logfile
+  def open(self):
+    if self.logFilePath:
+      try:
+        print(self.logFilePath)
+        # Clear the file contents
+        with open(self.logFilePath, mode='wb') as f:
+          f.write("")
+        # Set the variabled to an open handle to the file
+        self.logFileHandle = open(self.logFilePath, mode='ab')
+      except IOError as e:
+        self.errmsg("Cannot open logfile", e)
+        return None
+
+  # write raw data to logfile
+  def write(self, data):
+    if not data.endswith(os.linesep):
+        data = data + os.linesep
+    # logfile open and data non-empty
+    if self.logFileHandle and data:
+      try:
+        self.logFileHandle.write(self.stripColor(data))
+      except IOError as e:
+        self.errmsg("Cannot log", e)
+
+  # print and write raw data to logfile
+  def printAndWrite(self, data):
+    if data:
+      print(data)
+      if not data.endswith(os.linesep):
+        data = data + os.linesep
+      self.write(data)
+
+  # write comment to logfile
+  def comment(self, line):
+    if self.logFileHandle:
+      comment = "%" + ("[ " + line + " ]").center(72, '-')
+      self.write(os.linesep + comment + os.linesep)
+
+  # close logfile
+  def close(self):
+    try:
+      if self.logFileHandle:
+        self.logFileHandle.flush()
+        self.logFileHandle.close()
+    except IOError as e:
+      self.errmsg("Cannot close logfile", e)
+  # ----------------------------------------------------------------------
+      
+      
+  # show send commands (debug mode) - enhanced logging
+  def send(self, str, mode):
+    if str: 
+      print(Back.CYAN + str + Style.RESET_ALL)
+      if self.debugLevel > 0: self.write(str)
+    if str and mode == 'hex':
+      print(Fore.CYAN + conv().hex(str, ':') + Style.RESET_ALL)
+      if self.debugLevel > 0: self.write(conv().hex(str, ':'))
+
+  # show recv commands (debug mode) - enhanced logging
+  def recv(self, str, mode):
+    if str: 
+      print(Back.MAGENTA + str + Style.RESET_ALL)
+      if self.debugLevel > 0: self.write(str)
+    if str and mode == 'hex':
+      print(Fore.MAGENTA + conv().hex(str, ':') + Style.RESET_ALL)
+      if self.debugLevel > 0: self.write(conv().hex(str, ':'))
+
+  # show information - enhanced logging
+  def info(self, msg, eol=None):
+    if msg: 
+      print(Back.BLUE + msg + Style.RESET_ALL, end=eol)
+      self.write(msg)
+    sys.stdout.flush()
+
+  # show raw data - enhanced logging
+  def raw(self, msg, eol=None):
+    if msg: 
+      print(Fore.YELLOW + msg + Style.RESET_ALL, end=eol)
+      self.write(msg)
+    sys.stdout.flush()
+
+  # show chit-chat - enhanced logging
+  def chitchat(self, msg, eol=None):
+    if msg: 
+      print(Style.DIM + msg + Style.RESET_ALL, end=eol)
+      if self.debugLevel > 0: self.write(msg)
+    sys.stdout.flush()
+
+  # show warning message - enhanced logging
+  def warning(self, msg):
+    if msg: 
+      print(Back.RED + msg + Style.RESET_ALL)
+      self.write(msg)
+
+  # show green message - enhanced logging
+  def green(self, msg):
+    if msg: 
+      print(Back.GREEN + msg + Style.RESET_ALL)
+      self.write(msg)
+
+  # show error message - enhanced logging
+  def errmsg(self, msg, info=""):
+    info = str(info).strip()
+    if info: # monkeypatch to make python error message less ugly
+      info = item(re.findall('Errno -?\d+\] (.*)', info), '') or info.splitlines()[-1]
+      info = Style.RESET_ALL + Style.DIM + " (" + info.strip('<>') + ")" + Style.RESET_ALL
+    if msg: 
+      print(Back.RED + msg + info)
+      self.write((msg + info))
+
+  # show printer and status - enhanced logging
+  def discover(self, (ipaddr, (device, uptime, status, prstat))):
+    ipaddr = self.strfit(ipaddr, 15)
+    device = self.strfit(device, 27)
+    uptime = self.strfit(uptime,  8)
+    status = self.strfit(status, 23)
+    if device.strip() != 'device': device = Style.BRIGHT + device + Style.NORMAL
+    if prstat == '1': status = Back.GREEN  + status + Back.BLUE # unknown
+    if prstat == '2': status = Back.GREEN  + status + Back.BLUE # running
+    if prstat == '3': status = Back.YELLOW + status + Back.BLUE # warning
+    if prstat == '4': status = Back.GREEN  + status + Back.BLUE # testing
+    if prstat == '5': status = Back.RED    + status + Back.BLUE # down
+    line = (ipaddr, device, uptime, status)
+    self.info('%-15s  %-27s  %-8s  %-23s' % line)
+
+  # recursively list files - enhanced logging
+  def psfind(self, name):
+    precolorVol = item(re.findall("^(%.*%)", name))
+    precolorName = re.sub("^(%.*%)", '', name)
+    vol = Style.DIM + Fore.YELLOW + precolorVol + Style.RESET_ALL
+    name = Fore.YELLOW + const.SEP + precolorName + Style.RESET_ALL
+    print("%s %s" % (vol, name))
+    self.write(("%s %s" % (precolorVol, precolorName)))
+
+  # show directory listing - enhanced logging
+  def psdir(self, isdir, size, mtime, name, otime):
+    precolorOtime = "(created " + otime + ")" 
+    otime = Style.DIM + "(created " + otime + ")" + Style.RESET_ALL 
+    precolorVol = item(re.findall("^(%.*%)", name))
+    vol = Style.DIM + Fore.YELLOW + item(re.findall("^(%.*%)", name)) + Style.RESET_ALL
+    precolorName = re.sub("^(%.*%)", '', name) # remove volume information from filename
+    name = Style.BRIGHT + Fore.BLUE + precolorName + Style.RESET_ALL if isdir else precolorName
+    if isdir: 
+      print("d %8s   %s %s %s %s" % (size, mtime, otime, vol, name))
+      self.write(("d %8s   %s %s %s %s" % (size, mtime, precolorOtime, precolorVol, precolorName)))
+    else:     
+      print("- %8s   %s %s %s %s" % (size, mtime, otime, vol, name))
+      self.write(("- %8s   %s %s %s %s" % (size, mtime, precolorOtime, precolorVol, precolorName)))
+
+  # show directory listing - enhanced logging
+  def pjldir(self, name, size):
+    precolorName = name
+    name = name if size else Style.BRIGHT + Fore.BLUE + name + Style.RESET_ALL
+    if size: 
+      print("- %8s   %s" % (size, name))
+      self.write(("- %8s   %s" % (size, precolorName)))
+    else:    
+      print("d %8s   %s" % ("-", name))
+      self.write(("d %8s   %s" % ("-", precolorName)))
+
+  # show directory listing - enhanced logging
+  def pcldir(self, size, mtime, id, name):
+    precolorId = "(macro id: " + id + ")"
+    id = Style.DIM + "(macro id: " + id + ")" + Style.RESET_ALL
+    print("- %8s   %s %s %s" % (size, mtime, id, name))
+    self.write(("- %8s   %s %s %s" % (size, mtime, precolorId, name)))
+
+  # show output from df - enhanced logging
+  def df(self, args):
+    self.info("%-16s %-11s %-11s %-9s %-10s %-8s %-9s %-10s %-10s" % args)
+
+  # show fuzzing results - enhanced logging
+  def fuzzed(self, path, cmd, opt):
+      opt1, opt2, opt3 = opt
+      if isinstance(opt1, bool): opt1 = (Back.GREEN + str(opt1) + Back.BLUE + "   ")\
+                                 if opt1 else (Back.RED + str(opt1) + Back.BLUE + "  ")
+      if isinstance(opt2, bool): opt2 = (Back.GREEN + str(opt2) + Back.BLUE + "   ")\
+                                 if opt2 else (Back.RED + str(opt2) + Back.BLUE + "  ")
+      if isinstance(opt3, bool): opt3 = (Back.GREEN + str(opt3) + Back.BLUE + "   ")\
+                                 if opt3 else (Back.RED + str(opt3) + Back.BLUE + "  ")
+      opt = opt1, opt2, opt3
+      self.info("%-35s %-12s %-7s %-7s %-7s" % ((path, cmd) + opt))
+
+  # show captured jobs - enhanced logging
+  def joblist(self, (date, size, user, name, soft)):
+    user = self.strfit(user, 13)
+    name = self.strfit(name, 22)
+    soft = self.strfit(soft, 20)
+    line = (date, size, user, name, soft)
+    self.info('%-12s %5s  %-13s  %-22s  %-20s' % line)
+
+  # show ascii only - enhanced logging
+  def ascii(self, data):
+    data = re.sub(r"(\x00){10}", "\x00", data) # shorten nullbyte streams
+    data = re.sub(r"([^ -~])", ".", data) # replace non-printable chars
+    self.raw(data, "")
+
+  # show binary dump - enhanced logging
+  def dump(self, data):
+    # experimental regex to match sensitive strings like passwords
+    data = re.sub(r"[\x00-\x06,\x1e]([!-~]{6,}?(?!\\0A))\x00{16}", "START" + r"\1" + "STOP", data)
+    data = re.sub(r"\00+", "\x00", data) # ignore nullbyte streams
+    data = re.sub(r"(\x00){10}", "\x00", data) # ignore nullbyte streams
+    data = re.sub(r"([\x00-\x1f,\x7f-\xff])", ".", data)
+    data = re.sub(r"START([!-~]{6,}?)STOP", Style.RESET_ALL + Back.BLUE + r"\1" + Style.RESET_ALL + Fore.YELLOW, data)
+    self.raw(data, "")
+
+  # dump ps dictionary - enhanced logging
+  def psdict(self, data, indent=''):
+    reload(sys) # workaround for non-ascii output
+    sys.setdefaultencoding('UTF8')
+    # convert list to dictionary with indices as keys
+    if isinstance(data, list):
+      data = dict(enumerate(data))
+    # data now is expected to be a dictionary
+    if len(data.keys()) > 0: last = sorted(data.keys())[-1]
+    for key, val in sorted(data.items()):
+      type  = val['type'].replace('type', '')
+      value = val['value']
+      perms = val['perms']
+      recursion = False
+      # current enty is a dictionary
+      if isinstance(value, dict):
+        value, recursion = '', True
+      # current enty is a ps array
+      if isinstance(value, list):
+        try: # array contains only atomic values
+          value = ' '.join(x['value'] for x in value)
+        except: # array contains further list or dict
+          # value = sum(val['value'], [])
+          value, recursion = '', True
+      # value = value.encode('ascii', errors='ignore')
+      node = '┬' if recursion else '─'
+      edge = indent + ('└' if key == last else '├')
+      # output current node in dictionary
+      print("%s%s %-3s  %-11s  %-30s  %s" % (edge, node, perms, type, key, value))
+      self.write(("%s%s %-3s  %-11s  %-30s  %s" % (edge, node, perms, type, key, value)))
+      if recursion: # ...
+        self.psdict(val['value'], indent + (' ' if key == last else '│'))
+
+  # show some information - enhanced logging
+  def psonly(self):
+   self.chitchat("Info: This only affects jobs printed by a PostScript driver")
+
+  # countdown from sec to zero - enhanced logging
+  def countdown(self, msg, sec, cmd):
+    try:
+      sys.stdout.write(msg)
+      for x in reversed(range(1, sec+1)):
+        sys.stdout.write(" " + str(x))
+        sys.stdout.flush()
+        time.sleep(1)
+      print(" KABOOM!")
+      self.write(" KABOOM!")
+      return True
+    except KeyboardInterrupt:
+      print("")
+      self.write("")
+
+  # show horizontal line - enhanced logging
   def hline(self, len=72):
     self.info("─" * len)
 
@@ -323,29 +641,52 @@ class conv():
 # ----------------------------------------------------------------------
 
 class file():
-  # read from local file
-  def read(self, path):
+  # read from local file - enhanced logging
+  def read(self, logfile, path):
     try:
       with open(path, mode='rb') as f:
         data = f.read()
       f.close()
       return data
     except IOError as e:
-      output().errmsg("Cannot read from file", e)
+      output().errmsg(logfile, "Cannot read from file", e)
 
-  # write to local file
-  def write(self, path, data, m='wb'):
+  # read from local file
+  def read_(self, path):
+    try:
+      with open(path, mode='rb') as f:
+        data = f.read()
+      f.close()
+      return data
+    except IOError as e:
+      output().errmsg_("Cannot read from file", e)      
+      
+  # write to local file - enhanced logging
+  def write(self, logfile, path, data, m='wb'):
     try:
       with open(path, mode=m) as f:
         f.write(data)
       f.close()
     except IOError as e:
-      output().errmsg("Cannot write to file", e)
+      output().errmsg(logfile, "Cannot write to file", e)
+
+  # write to local file
+  def write_(self, path, data, m='wb'):
+    try:
+      with open(path, mode=m) as f:
+        f.write(data)
+      f.close()
+    except IOError as e:
+      output().errmsg_("Cannot write to file", e)
+      
+  # append to local file - enhanced logging
+  def append(self, logfile, path, data):
+    self.write(logfile, path, data, 'ab+')
 
   # append to local file
-  def append(self, path, data):
-    self.write(path, data, 'ab+')
-
+  def append_(self, path, data):
+    self.write_(path, data, 'ab+')    
+    
 # ----------------------------------------------------------------------
 
 class conn(object):
@@ -379,7 +720,7 @@ class conn(object):
 
   # send data
   def send(self, data):
-    if self.debug: output().send(self.beautify(data), self.debug)
+    if self.debug: output().send_(self.beautify(data), self.debug)
     # send data to device
     if self._file: return os.write(self._file, data)
     # send data to socket
@@ -392,9 +733,9 @@ class conn(object):
     # receive data from socket
     else: data = self._sock.recv(bytes)
     # output recv data when in debug mode
-    if self.debug: output().recv(self.beautify(data), self.debug)
-    return data
-
+    if self.debug: output().recv_(self.beautify(data), self.debug)
+    return data    
+    
   # so-many-seconds-passed bool condition
   def past(self, seconds, watchdog):
     return int(watchdog * 100) % (seconds * 100) == 0
@@ -420,17 +761,17 @@ class conn(object):
       # timeout plus it seems we are not receiving data anymore
       if wd > self._sock.gettimeout() and wd >= wd_old + limit:
         if len(data) == bytes:
-          output().errmsg("Receiving data failed", "watchdog timeout")
+          output().errmsg_("Receiving data failed", "watchdog timeout")
           break
       # visual feedback on large/slow data transfers
       if self.slow(limit, wd) and self.past(0.1, wd) and len(data) > 0:
-        output().chitchat(str(len(data)) + " bytes received\r", '')
+        output().chitchat_(str(len(data)) + " bytes received\r", '')
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # clear current line from 'so-many bytes received' chit-chat
-    if self.slow(limit, wd): output().chitchat(' ' * 24 + "\r", '')
+    if self.slow(limit, wd): output().chitchat_(' ' * 24 + "\r", '')
     # warn if feedback expected but response empty (= delimiter only)
     # this also happens for data received out of order (e.g. brother)
-    if fb and s.search(data): output().chitchat("No data received.")
+    if fb and s.search(data): output().chitchat_("No data received.")
     # remove delimiter itself from data
     if crop: data = r.sub('', data)
     # crop uel sequence at the beginning
@@ -457,8 +798,8 @@ class conn(object):
       else: data = re.sub(r'\x0d+\x0a\x0c\x04?$', '', data)
     # crop whitespaces/newline as feedback
     if not binary: data = data.strip()
-    return data
-
+    return data    
+    
   # beautify debug output
   def beautify(self, data):
     # remove sent/recv uel sequences
