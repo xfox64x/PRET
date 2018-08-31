@@ -1,4 +1,11 @@
 ## PRET - Printer Exploitation Toolkit
+Heavily modified fork of PRET done mainly to fix issues when running on Windows and enhance logging capabilities. Logging now contains timestampped command execution, rendered as seen in the PRET shell. Future plans include:
+- Fixing HTTP/S errors.
+- Improving printer fingerprinting.
+- Adding PRET shell commands to do SNMP/nmap/other scans.
+- Attacks on other protocols.
+- Exploit integration.
+- Target management and tracking.
 
 **Is your printer secure? Check before someone else does...**
 
