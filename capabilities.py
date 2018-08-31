@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # python standard library
-import re, os, sys, urllib2
+import re, os, sys, urllib2, httplib
 
 # local pret classes
 from helper import output, item
@@ -12,6 +12,16 @@ try:
 except ImportError:
   pass
 
+def HTTPResponsePatch(func):
+  def inner(*args):
+    try:
+      return func(*args)
+    except httplib.IncompleteRead, e:
+      return e.partial
+  return inner 
+  
+httplib.HTTPResponse.read = HTTPResponsePatch(httplib.HTTPResponse.read)
+  
 class capabilities():
   # set defaults
   support = False
