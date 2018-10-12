@@ -30,27 +30,29 @@ def usage():
 
 # ----------------------------------------------------------------------
 
-def intro(quiet):
-  if not quiet:
-    print("      ________________                                             ")
-    print("    _/_______________/|                                            ")
-    print("   /___________/___//||   PRET | Printer Exploitation Toolkit v0.40")
-    print("  |===        |----| ||    by Jens Mueller <jens.a.mueller@rub.de> ")
-    print("  |           |   ô| ||                                            ")
-    print("  |___________|   ô| ||                                            ")
-    print("  | ||/.´---.||    | ||        pentesting tool that made           ")
-    print("  |-||/_____\||-.  | |´         dumpster diving obsolete           ")
-    print("  |_||=L==H==||_|__|/                                              ")
-    print("                                                                   ")
-    print("     (ASCII art by                                                 ")
-    print("     Jan Foerster)                                                 ")
-    print("                                                                   ")
+def print_ascii_art():
+  print("      ________________                                             ")
+  print("    _/_______________/|                                            ")
+  print("   /___________/___//||   PRET | Printer Exploitation Toolkit v0.40")
+  print("  |===        |----| ||    by Jens Mueller <jens.a.mueller@rub.de> ")
+  print("  |           |   ô| ||                  [Forrest]                 ")
+  print("  |___________|   ô| ||                                            ")
+  print("  | ||/.´---.||    | ||        pentesting tool that made           ")
+  print("  |-||/_____\||-.  | |´         dumpster diving obsolete           ")
+  print("  |_||=L==H==||_|__|/                                              ")
+  print("                                                                   ")
+  print("     (ASCII art by                                                 ")
+  print("     Jan Foerster)                                                 ")
+  print("                                                                   ")
 
 # ----------------------------------------------------------------------
 
 def main():
   args = usage()     # parse args/options #
-  intro(args.quiet)  # show asciitainment #
+  
+  if not args.quiet:
+    print_ascii_art()  # show asciitainment #
+    
   capabilities(args) # check capabilities #
   # connect to printer, use this language #
   if args.mode == 'ps':  postscript(args)
