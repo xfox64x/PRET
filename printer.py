@@ -42,6 +42,7 @@ class printer(cmd.Cmd, object):
     self.mode  = args.mode  # command mode
     self.logger = Logger()
     
+    # Setup logging information if logging requested.
     if args.Log == True:
       self.logfilepath = os.path.join(os.getcwd(),("%s_PRET_Log.txt" % (self.target)))
     elif args.log:
@@ -312,13 +313,16 @@ class printer(cmd.Cmd, object):
       self.conn.timeout(self.timeout)
       self.conn.open(arg)
       self.logger.printAndWrite("Connection to " + arg + " established")
+      
       # hook method executed after successful connection
       self.on_connect(mode)
+      
       # show some information about the device
       if not self.quiet and mode != 'reconnect':
         sys.stdout.write("Device:   ");
         self.logger.write("[%s - Established initial connection with: %s]" % (self.logger.getTimestamp(), self.target))
         self.do_id()
+        
       self.logger.printAndWrite("")
       # set printer default values
       self.set_defaults(newtarget)
@@ -542,7 +546,7 @@ class printer(cmd.Cmd, object):
       if lsize != rsize and len(conv().nstrip(data)) == rsize:
         lsize, data = rsize, conv().nstrip(data)
       # write to local file
-      file().write(lpath, data)
+      file().write(self.logger, lpath, data)
       if lsize == rsize:
         self.logger.printAndWrite(str(lsize) + " bytes received.")
       else:
