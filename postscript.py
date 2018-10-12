@@ -266,8 +266,14 @@ class postscript(printer):
   def do_id(self, *arg):
     "Show device information."
     modelString = self.cmd('product print')
+    
+    # Add the modelString to the printer database, if it's not already in there.
     if modelString and modelString != "":
-      printerModelDatabase().add_model("ps", modelString)
+      if printerModelDatabase().add_model("ps", modelString):
+        print("Added model to PS device database")
+      else:
+        print("Did not add model to PS device database")
+      
     self.logger.info(modelString)
 
   # ------------------------[ version ]---------------------------------
